@@ -26,7 +26,21 @@ go.work.sum
 
 # env file
 .env
+.env.*
+
+# Track handoff state (.agents/) and shared Claude Code config (.claude/) in git,
+# even though the global gitignore ignores all dotfiles (".*"). Repo rules win.
+# No trailing slash so the negation also applies before the dir exists on disk;
+# the /** form re-includes nested dotfiles (e.g. .agents/.gitkeep) too.
+!.agents
+!.agents/**
+!.claude
+!.claude/**
+# ...but personal local Claude Code settings stay out of git.
+.claude/settings.local.json
 
 # Editor/IDE
 # .idea/
-# .vscode/
+.vscode/
+
+tmp/
