@@ -7,9 +7,9 @@
       "name": "Ollama (Pro cloud)",
       "options": { "baseURL": "http://localhost:11434/v1" },
       "models": {
-        "qwen3-coder:30b-cloud": { "tools": true },
-        "granite3.3:8b-cloud": { "tools": true },
-        "qwen2.5-coder:7b-cloud": { "tools": true }
+        "qwen3-coder-next:cloud": { "tools": true },
+        "devstral-small-2:24b-cloud": { "tools": true },
+        "qwen3.5:cloud": { "tools": true }
       }
     }
   },
@@ -25,7 +25,7 @@
     "coder": {
       "description": "Implements code changes per .agents/plan.md. Writes a changelog to .agents/changes.md.",
       "mode": "subagent",
-      "model": "ollama/qwen3-coder:30b-cloud",
+      "model": "ollama/qwen3-coder-next:cloud",
       "temperature": 0.1,
       "tools": { "write": true, "edit": true, "bash": true }
     },
@@ -39,14 +39,14 @@
     "tester": {
       "description": "Runs go test, diagnoses failures, applies minimal fixes. Writes .agents/test-report.md.",
       "mode": "subagent",
-      "model": "ollama/granite3.3:8b-cloud",
+      "model": "ollama/devstral-small-2:24b-cloud",
       "temperature": 0.1,
       "tools": { "write": true, "edit": true, "bash": true }
     },
     "documenter": {
       "description": "Writes/updates README, godoc comments, and .agents/summary.md.",
       "mode": "subagent",
-      "model": "ollama/qwen2.5-coder:7b-cloud",
+      "model": "ollama/qwen3.5:cloud",
       "temperature": 0.4,
       "tools": { "write": true, "edit": true, "bash": false }
     }
