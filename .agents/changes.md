@@ -1,14 +1,23 @@
 # Changes
 
-## Greet scaffold (smoke test, Claude Code)
+## M1 — deterministic pipeline (PR #3, Claude Code)
 
-- `go.mod` — initialized module `github.com/valpere/depl-orch` (Go 1.26).
-- `greet.go` — added package `deplorch` with exported `Greet(name string) string`:
-  returns `"Hello, <name>!"`, or `"Hello, stranger!"` when name is empty.
-- `greet_test.go` — table-driven `TestGreet` covering the named and empty cases.
+- `internal/pipeline/` — `Stage`/`State`/`Runner` + injectable `Commander`; four
+  ordered stages (build, test, docker-build, docker-push) via `os/exec`, discrete
+  args, no shell. Stdlib-only → layering rule holds by construction.
+- `internal/config/` — env-driven config; strict bool parse; image trimmed+required.
+- `cmd/deployer/` — wiring, JSON slog, `signal.NotifyContext`.
+- `examples/sample-service/` — HTTP service (own module) + multi-stage Dockerfile.
+- `test/e2e/` — build-tagged real e2e (build+push). Unit tests hermetic.
+- Removed the Greet smoke scaffold (superseded).
 
-Why: end-to-end plumbing validation for the Claude Code + OpenCode handoff
-(Scenario 1 smoke test). `go test ./...` passes; `gofmt`/`go vet` clean.
+Why: M1 is the reproducible spine the rest of the conveyor builds on (no LLM on
+the pipeline path). Verified: gofmt/vet clean, `go test ./...` 6 passed; e2e
+pushed `docker.io/pereval/depl-orch-sample:m1-test`. Reviewed independently by
+the OpenCode reviewer (minimax-m3) → `.agents/review.md`.
 
-Handoff: ready for OpenCode conveyor — reviewer → `.agents/review.md`,
-tester → `.agents/test-report.md`, documenter → godoc + README + `.agents/summary.md`.
+## CI + docs (follow-up)
+
+- `.github/workflows/ci.yml` — gofmt/vet/build/test on push to `main` + PRs, for
+  the root module and `examples/sample-service`.
+- README, AGENTS.md, requirements §6 roadmap updated to reflect M1 done + CI.

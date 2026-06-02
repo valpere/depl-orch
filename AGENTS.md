@@ -6,9 +6,12 @@ agentic recovery on failing steps. See README once it exists.
 
 ## Commands
 - Build: `go build ./...`
-- Test:  `go test ./...`
+- Test:  `go test ./...`  (unit tests are hermetic — no docker needed)
 - Format: `gofmt -w .`  (CI rejects unformatted code)
-- Lint (when configured): `go vet ./...`
+- Lint: `go vet ./...`
+- E2E (real docker build+push): `go test -tags integration ./test/e2e/...`
+- CI: `.github/workflows/ci.yml` runs gofmt/vet/build/test on push to `main` and
+  every PR, for the root module and `examples/sample-service` (its own module).
 
 ## Conventions
 - Idiomatic Go; small, reviewable diffs over large rewrites.

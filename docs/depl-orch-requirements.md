@@ -182,8 +182,8 @@ a milestone until the previous one is green.
 - **M0 — Scaffold.** Module, layout, `go build`/`go test` run. *(done)*
 - **M1 — Deterministic pipeline, no LLM.** build/test/docker-build/docker-push
   green end-to-end on a sample repo with a hand-written Dockerfile. This is the
-  reproducible spine; prove it before adding any model. *(skeleton present;
-  finish + test)*
+  reproducible spine; prove it before adding any model. *(done — PR #3; e2e
+  pushed `docker.io/pereval/depl-orch-sample:m1-test`; CI added in a follow-up)*
 - **M2 — Model factory + fix-test with rollback.** Backend-agnostic model;
   one bounded agentic recovery step; verify rollback on a deliberately broken
   test, and a successful fix on a trivially broken one.
