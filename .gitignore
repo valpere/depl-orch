@@ -50,3 +50,6 @@ go.work.sum
 .vscode/
 
 tmp/
+
+# compiled sample-service binary (build artifact from the e2e pipeline target)
+/examples/sample-service/sample-service
