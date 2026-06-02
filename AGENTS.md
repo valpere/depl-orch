@@ -38,7 +38,10 @@ quota-preserving bulk → lane 3; hard/contextual → lane 1.
 ## Multi-tool handoff (state lives in files, not chat)
 - Plans go to `.agents/plan.md` before code is written.
 - Implementation changelog goes to `.agents/changes.md` (files + why).
-- Independent review (run via OpenCode/Gemini) goes to `.agents/review.md`.
+- Independent review (run via OpenCode reviewer) goes to `.agents/review.md`.
 - Test results go to `.agents/test-report.md`.
 - Doc summaries go to `.agents/summary.md`.
 - The driver (Claude Code) reads these artifacts to decide done / iterate.
+- These canonical files are committed as handoff history. Transient scratch —
+  raw diffs, A/B variants, run logs — goes to `.agents/scratch/` or an
+  `_`-prefixed name (both gitignored). Never commit scratch.
