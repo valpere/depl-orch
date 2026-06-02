@@ -16,29 +16,42 @@ agentic recovery on failing steps. See README once it exists.
 - Never commit secrets. `.env` is gitignored and stays that way.
 
 ## Model / tool routing (which lane for which task)
-Three lanes, cheapest capable one wins. Cost notes matter — pick by budget, not habit.
+Three lanes. Match the lane to the work; cheapest *capable* one wins.
 
-1. **Interactive Claude Code (Opus, Pro subscription)** — heavy reasoning, design,
-   multi-file refactors, anything needing the full conversation. The primary driver.
-2. **Headless Claude (`claude -p --model haiku|sonnet`)** — still on the Pro
-   subscription (5h/weekly quota, no per-token cost), same Claude family, sees this
-   `AGENTS.md`. Use for quick mechanical subtasks: boilerplate generation, small
-   refactors, formatting/renames, one-shot questions. Haiku for trivial, Sonnet for
-   moderate. Reserve Opus for genuinely hard work.
+1. **Driver — interactive Claude Code, Opus or Sonnet (Pro subscription).** The
+   primary orchestrator + planner + coder. Holds the full conversation, plans
+   **inline** (planning is context-heavy — never push it headless), and judges
+   every delegated result. Use Opus for hard reasoning / multi-file design; drop
+   to Sonnet to save quota when the work is moderate. Pick the strongest model
+   you're willing to spend — the driver must be **≥** anything it orchestrates.
+2. **Tool lane — headless Haiku (`claude -p --model haiku`).** Same Pro
+   subscription (5h/weekly quota, no per-token), sees this `AGENTS.md`. For
+   bounded, deterministic, no-judgment mechanics: formatting, renames,
+   boilerplate, running a command and reporting. Haiku is stateless (cold start
+   per call) — pass it everything it needs; don't hand it work that needs context
+   or judgment.
    - Scripting flags: `--output-format json`, `--permission-mode acceptEdits`,
      `--append-system-prompt`, `--fallback-model sonnet`.
-3. **OpenCode conveyor (Gemini + Ollama Pro cloud, $20 flat)** — a *different* model
-   family for independent review/tests, or to offload bulk work **without burning
-   subscription quota**. Invoked via `opencode`; see handoff below. Ollama Pro caps
-   at **3 concurrent cloud models** (coder/tester/documenter sit exactly at it).
+3. **Review lane — OpenCode (Ollama Pro cloud, $20 flat).** A **different model
+   family** (non-Claude) for independent review/tests — independence is the whole
+   point, so this must NOT be Claude. Also absorbs quota-preserving bulk. Invoked
+   via `opencode run --agent <role>`; see handoff below. Reviewer = minimax-m3;
+   Ollama Pro caps at **3 concurrent cloud models**.
 
-Rule of thumb: trivial Claude-family work → lane 2; independent second opinion or
-quota-preserving bulk → lane 3; hard/contextual → lane 1.
+Anti-patterns: don't let a weaker model orchestrate a stronger one (the
+orchestrator must judge the output it receives), and don't make a strong model a
+*headless* planner — headless is stateless, and planning needs the live context.
+
+Rule of thumb: hard/contextual → lane 1; mechanical no-judgment → lane 2;
+independent (cross-family) review or bulk → lane 3.
 
 ## Multi-tool handoff (state lives in files, not chat)
 - Plans go to `.agents/plan.md` before code is written.
 - Implementation changelog goes to `.agents/changes.md` (files + why).
-- Independent review (run via OpenCode/Gemini) goes to `.agents/review.md`.
+- Independent review (run via OpenCode reviewer) goes to `.agents/review.md`.
 - Test results go to `.agents/test-report.md`.
 - Doc summaries go to `.agents/summary.md`.
 - The driver (Claude Code) reads these artifacts to decide done / iterate.
+- These canonical files are committed as handoff history. Transient scratch —
+  raw diffs, A/B variants, run logs — goes to `.agents/scratch/` or an
+  `_`-prefixed name (both gitignored). Never commit scratch.

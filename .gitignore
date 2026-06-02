@@ -38,6 +38,12 @@ go.work.sum
 !.claude/**
 # ...but personal local Claude Code settings stay out of git.
 .claude/settings.local.json
+# ...and transient scratch under .agents/ stays out of commits (canonical
+# handoff files like plan/changes/review/test-report/summary.md are tracked;
+# put throwaway work — diffs, A/B variants, run logs — in .agents/scratch/
+# or give it an underscore prefix).
+.agents/scratch/
+.agents/_*
 
 # Editor/IDE
 # .idea/
