@@ -9,19 +9,14 @@
       "models": {
         "qwen3-coder-next:cloud": { "tools": true },
         "devstral-small-2:24b-cloud": { "tools": true },
-        "qwen3.5:cloud": { "tools": true }
+        "qwen3.5:cloud": { "tools": true },
+        "minimax-m3:cloud": { "tools": true },
+        "kimi-k2.6:cloud": { "tools": true }
       }
     }
   },
 
   "agent": {
-    "planner": {
-      "description": "Decomposes a task into a plan (.agents/plan.md), delegates to subagents, verifies results. You talk to this agent.",
-      "mode": "primary",
-      "model": "openrouter/anthropic/claude-opus-4",
-      "temperature": 0.2,
-      "tools": { "write": false, "edit": false, "bash": false }
-    },
     "coder": {
       "description": "Implements code changes per .agents/plan.md. Writes a changelog to .agents/changes.md.",
       "mode": "subagent",
@@ -30,22 +25,22 @@
       "tools": { "write": true, "edit": true, "bash": true }
     },
     "reviewer": {
-      "description": "Reviews the diff for bugs, security, and Go idioms. Read-only. Different model family than coder (Gemini vs Qwen).",
-      "mode": "subagent",
-      "model": "openrouter/google/gemini-2.5-pro",
+      "description": "Independent review: bugs, security, Go idioms. Read-only. Non-Claude family (reviews code Claude Code wrote).",
+      "mode": "primary",
+      "model": "ollama/minimax-m3:cloud",
       "temperature": 0.3,
       "tools": { "write": false, "edit": false, "bash": false }
     },
     "tester": {
       "description": "Runs go test, diagnoses failures, applies minimal fixes. Writes .agents/test-report.md.",
-      "mode": "subagent",
+      "mode": "primary",
       "model": "ollama/devstral-small-2:24b-cloud",
       "temperature": 0.1,
       "tools": { "write": true, "edit": true, "bash": true }
     },
     "documenter": {
       "description": "Writes/updates README, godoc comments, and .agents/summary.md.",
-      "mode": "subagent",
+      "mode": "primary",
       "model": "ollama/qwen3.5:cloud",
       "temperature": 0.4,
       "tools": { "write": true, "edit": true, "bash": false }
