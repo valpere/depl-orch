@@ -36,6 +36,8 @@ go.work.sum
 !.agents/**
 !.claude
 !.claude/**
+!.github
+!.github/**
 # ...but personal local Claude Code settings stay out of git.
 .claude/settings.local.json
 # ...and transient scratch under .agents/ stays out of commits (canonical
