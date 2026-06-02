@@ -1,0 +1,54 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  "provider": {
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (Pro cloud)",
+      "options": { "baseURL": "http://localhost:11434/v1" },
+      "models": {
+        "qwen3-coder-next:cloud": { "tools": true },
+        "devstral-small-2:24b-cloud": { "tools": true },
+        "qwen3.5:cloud": { "tools": true }
+      }
+    }
+  },
+
+  "agent": {
+    "planner": {
+      "description": "Decomposes a task into a plan (.agents/plan.md), delegates to subagents, verifies results. You talk to this agent.",
+      "mode": "primary",
+      "model": "openrouter/anthropic/claude-opus-4",
+      "temperature": 0.2,
+      "tools": { "write": false, "edit": false, "bash": false }
+    },
+    "coder": {
+      "description": "Implements code changes per .agents/plan.md. Writes a changelog to .agents/changes.md.",
+      "mode": "subagent",
+      "model": "ollama/qwen3-coder-next:cloud",
+      "temperature": 0.1,
+      "tools": { "write": true, "edit": true, "bash": true }
+    },
+    "reviewer": {
+      "description": "Reviews the diff for bugs, security, and Go idioms. Read-only. Different model family than coder (Gemini vs Qwen).",
+      "mode": "subagent",
+      "model": "openrouter/google/gemini-2.5-pro",
+      "temperature": 0.3,
+      "tools": { "write": false, "edit": false, "bash": false }
+    },
+    "tester": {
+      "description": "Runs go test, diagnoses failures, applies minimal fixes. Writes .agents/test-report.md.",
+      "mode": "subagent",
+      "model": "ollama/devstral-small-2:24b-cloud",
+      "temperature": 0.1,
+      "tools": { "write": true, "edit": true, "bash": true }
+    },
+    "documenter": {
+      "description": "Writes/updates README, godoc comments, and .agents/summary.md.",
+      "mode": "subagent",
+      "model": "ollama/qwen3.5:cloud",
+      "temperature": 0.4,
+      "tools": { "write": true, "edit": true, "bash": false }
+    }
+  }
+}
