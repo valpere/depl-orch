@@ -186,7 +186,10 @@ a milestone until the previous one is green.
   pushed `docker.io/pereval/depl-orch-sample:m1-test`; CI added in a follow-up)*
 - **M2 — Model factory + fix-test with rollback.** Backend-agnostic model;
   one bounded agentic recovery step; verify rollback on a deliberately broken
-  test, and a successful fix on a trivially broken one.
+  test, and a successful fix on a trivially broken one. *(done — `internal/model`
+  factory (ollama|openai|anthropic via Eino), `internal/agent` fix-test as a
+  `pipeline.Recoverable` with git snapshot/rollback + bounded loop + repo-scoped
+  guarded tools; opt-in via `DEPLOY_RECOVER`.)*
 - **M3 — Cost-aware classifier.** Cheap triage node selects fixer tier or
   fails fast. Verify it doesn't escalate trivial cases and doesn't loop on
   unfixable ones.
