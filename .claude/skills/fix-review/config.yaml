@@ -1,0 +1,13 @@
+# depl-orch fix-review config
+# Mirrors opencode.json reviewer models.
+# Auth: localhost:11434 — ollama signin handles device auth, no OLLAMA_API_KEY.
+
+api_url: http://localhost:11434/api/chat
+
+reviewers:
+  round_1: { model: minimax-m3:cloud }
+  round_2: { model: kimi-k2.6:cloud }
+  round_3: { model: devstral-small-2:24b-cloud }
+
+telemetry_enabled: true
+telemetry_file: .claude/skills/fix-review/telemetry.jsonl

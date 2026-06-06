@@ -58,3 +58,6 @@ tmp/
 
 # dreaming reports/log are generated weekly — keep the script+prompt, not the output
 .claude/dreaming/reports/
+
+# fix-review runtime output (run logs, not skill config)
+.claude/skills/fix-review/telemetry.jsonl
