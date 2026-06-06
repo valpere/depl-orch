@@ -21,6 +21,8 @@ type Config struct {
 	Dockerfile string // Dockerfile path, absolute or relative to WorkDir (operator-trusted)
 	ImageRef   string // full image reference, e.g. docker.io/pereval/app:tag (not a secret)
 	Push       bool   // push the built image to its registry
+	Recover    bool   // enable bounded agentic recovery (fix-test) on a failed stage
+	MaxRetries int    // recovery attempts per stage when Recover is on
 }
 
 // Load reads the configuration from the environment.
@@ -34,11 +36,17 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("DEPLOY_PUSH: %w", err)
 	}
+	doRecover, err := getenvBool("DEPLOY_RECOVER", false)
+	if err != nil {
+		return Config{}, fmt.Errorf("DEPLOY_RECOVER: %w", err)
+	}
 	c := Config{
 		WorkDir:    getenv("DEPLOY_WORKDIR", "."),
 		Dockerfile: getenv("DEPLOY_DOCKERFILE", "Dockerfile"),
 		ImageRef:   strings.TrimSpace(os.Getenv("DEPLOY_IMAGE")),
 		Push:       push,
+		Recover:    doRecover,
+		MaxRetries: getenvInt("DEPLOY_MAX_RETRIES", 1),
 	}
 	if c.ImageRef == "" {
 		return Config{}, fmt.Errorf("DEPLOY_IMAGE is required (e.g. docker.io/pereval/app:tag)")
@@ -56,6 +64,15 @@ func getenv(key, def string) string {
 // getenvBool parses a boolean env var, returning def when unset. An invalid value
 // is an error rather than a silent fallback — a typo like DEPLOY_PUSH=flase must
 // not quietly flip behaviour.
+func getenvInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
 func getenvBool(key string, def bool) (bool, error) {
 	v := os.Getenv(key)
 	if v == "" {

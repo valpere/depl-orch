@@ -1,70 +1,84 @@
-# Plan — M1: deterministic pipeline (build → test → docker-build → docker-push)
+# Plan — M2: model factory + fix-test recovery (bounded, git-rollback)
 
-Source of truth: `docs/depl-orch-requirements.md` (§3.1, §5, §6 M1).
-Scope: the reproducible spine. **No LLM on the pipeline path.** Eino/model
-factory is M2 — not pulled in here.
+Source: `docs/depl-orch-requirements.md` §3.2, §5, §6 M2. Builds on M1.
+Goal: backend-agnostic model + ONE bounded agentic recovery step (fix-test),
+with git snapshot/rollback. Verify: rollback on a deliberately-broken (unfixable)
+test; successful fix on a trivially-broken one.
 
-## Reality check (corrects the doc's "skeleton exists")
-The repo has only `go.mod` + the Greet smoke scaffold. No `internal/`, `cmd/`,
-or deps. M1 is greenfield. The Greet scaffold (`greet.go`, `greet_test.go`) is
-unrelated smoke plumbing → **removed** as the real code lands.
+## Hard invariant (unchanged)
+`internal/pipeline` imports ONLY stdlib. M2 adds a small `Recoverable` interface
+THERE (stdlib only); the agent layer implements it. pipeline never imports agent.
 
-## Decisions
-- **docker-push target:** Docker Hub `docker.io/pereval/<image>:<tag>` (account
-  exists, daemon already logged in). Registry/image/tag are env-configurable;
-  auth stays **out-of-band** (existing `docker login` / CI login step) — never in
-  code or logs. ghcr.io is a future config swap (GITHUB_TOKEN), wired in M5.
-- **No external deps in M1** — stdlib only (`os/exec`, `log/slog`, `context`,
-  `flag`/env). Keeps the spine reproducible; deps arrive with Eino in M2.
+## New dependency (per §5 tech stack)
+Eino (CloudWeGo) + eino-ext model components. Pin versions via `go mod tidy`;
+verify config struct fields against the pinned release (§7 drift risk).
+Concrete API (from context7, 2026-06):
+- `model.ToolCallingChatModel` = `BaseChatModel` + `WithTools([]*schema.ToolInfo) (ToolCallingChatModel, error)`; `Generate(ctx, []*schema.Message, ...model.Option) (*schema.Message, error)`.
+- `ollama.NewChatModel(ctx, &ollama.ChatModelConfig{BaseURL, Model})`
+- `openai.NewChatModel(ctx, &openai.ChatModelConfig{APIKey, Model, BaseURL, Temperature *float32, MaxCompletionTokens *int})`
+- `claude.NewChatModel(ctx, &claude.Config{APIKey, Model, MaxTokens})`
+- tools: `toolutils.InferTool(name, desc, fn)` → `tool.InvokableTool` (`.Info(ctx)`, `.InvokableRun(ctx, argsJSON)`).
+- messages: `schema.SystemMessage/UserMessage/AssistantMessage/ToolMessage`; `resp.ToolCalls` (ID, Function.Name, Function.Arguments).
 
 ## Files
 ```
-cmd/deployer/main.go          wiring: load config → build pipeline → run → exit code
-internal/config/config.go     env-driven config (WorkDir, image ref, Dockerfile, Push)
-internal/pipeline/pipeline.go Stage interface, State, Runner (ordered, logs start/end/elapsed, stop-on-fail)
-internal/pipeline/exec.go     Commander interface + osCommander (real) — injectable so stages are unit-testable
-internal/pipeline/stages.go   Build, Test, DockerBuild, DockerPush stages (shell out via Commander)
-internal/pipeline/*_test.go   unit tests with a fake Commander (order, stop-on-fail, output capture, elapsed)
-examples/sample-service/      tiny Go HTTP service + test + hand-written Dockerfile (the e2e target)
-test/e2e/e2e_test.go          //go:build integration — real e2e: build→test→docker-build→push to a test tag
+internal/model/factory.go      New(cfg) → model.ToolCallingChatModel, switch by backend
+                               (ollama|openai|anthropic) — mirrors NewDeployer shape
+internal/model/config.go       env-driven model config (backend, model id, baseURL, key, ...)
+internal/agent/tools.go        repo-scoped read_file / write_file built via InferTool,
+                               with a path-traversal guard (clean + must stay in repo root)
+internal/agent/fixtest.go      FixTest implements pipeline.Recoverable; bounded tool-loop +
+                               git snapshot/rollback + rationale to .agents/
+internal/agent/loop.go         runToolLoop(ctx, model, tools, msgs, maxIter) — generic bounded
+                               generate→dispatch-tool-calls→append loop (no control-flow LLM leak)
+internal/agent/git.go          snapshot()/rollback() helpers (git stash-based), repo-scoped
+internal/pipeline/recover.go   Recoverable interface + Runner recovery wiring (stdlib only)
+*_test.go                      hermetic units: fake ToolCallingChatModel + temp git repo + tmp fs
+test/e2e/recover_test.go       //go:build integration — real model fixes a real broken test
 ```
 
-## Key contracts
-- `Stage`: `Name() string` + `Run(ctx, *State) error`. Deterministic; on failure
-  captures combined output into `State` and returns a typed error.
-- `State`: WorkDir, ImageRef (registry/name:tag), per-stage outputs, timings.
-- `Runner`: runs stages in order; logs JSON start/end/elapsed; stops at first
-  failure; returns the failing stage + captured output. No retry in M1 (YAGNI —
-  deterministic stages don't retry; the retry/`Recoverable` budget arrives in M2
-  when agentic recovery uses it). The layering rule holds now: `pipeline` never
-  imports `agent`, so M2 slots recovery in without touching the core contract.
-- `Commander`: `Run(ctx, dir, name string, args ...string) (combinedOutput []byte, err error)`.
-  `osCommander` wraps `exec.CommandContext`. Stages depend on the interface →
-  unit tests inject a fake, no docker/go needed for unit runs.
+## Contracts
+- `pipeline.Recoverable` (in pipeline, stdlib only):
+  `Recover(ctx, st *State, stage string, stageErr error) error`
+- `Runner` gains `Recoverer Recoverable` + `MaxRetries int`. On a stage failure:
+  if Recoverer set and attempts remain, call `Recover(ctx, st, name, err)`; if it
+  returns nil, re-run the stage; if it returns an error, fail (not recoverable).
+  Recoverer==nil ⇒ M1 behaviour (fail fast). Deterministic core unchanged when
+  Recoverer is nil.
+- `FixTest.Recover`: if stage != "test" → return stageErr (not its job). Else it is
+  SELF-CONTAINED and SELF-VERIFYING: `git` snapshot → bounded model loop (system
+  prompt: "fix the failing Go test by editing SOURCE; NEVER weaken or delete tests;
+  use read_file/write_file") → run `go test ./...` itself → if pass: keep changes,
+  write rationale to `.agents/fix-test.md`, return nil; if still failing or the
+  iteration budget is exhausted: **rollback to snapshot**, return an error. So the
+  tree is never left dirty by a broken agent (§2.3), and unfixable fails loudly (§2.4).
 
-## Stages (deterministic, idempotent where possible)
-- **build** — `go build ./...` in WorkDir.
-- **test** — `go test ./...`; capture output on failure into State.
-- **docker-build** — `docker build -f <Dockerfile> -t <imageRef> <ctx>`.
-- **docker-push** — `docker push <imageRef>` (skipped if `Push=false`).
-- Each logs start/end/elapsed (slog JSON) and wraps errors with stage name + tail
-  of output.
+## Bounds (§4)
+- `maxIterations` per fix-test loop (default 4) — exhaustion = fail, not loop.
+- Runner `MaxRetries` for the test stage (default 1 recovery attempt).
+- Per-call model timeout via context (the Ollama-hang §7 mitigation, baked in).
+
+## Security (§4)
+- Repo-scoped tools only: every path is `filepath.Clean`ed and must remain within
+  the repo root (reject `..` escape and absolute-outside); model-generated paths
+  are untrusted. No shell (Commander contract). Secrets (API keys) read from env in
+  the factory, never logged.
 
 ## Test strategy
-- **Unit (always run, no docker):** fake Commander asserts stage order,
-  stop-on-failure, output capture, elapsed logged, and `Push=false` skips push.
-- **Integration (`-tags integration`, needs docker):** real pipeline against
-  `examples/sample-service` → builds image, pushes `docker.io/pereval/depl-orch-sample:m1-<shortsha>`.
-  Kept out of the default `go test ./...` so CI/unit stays hermetic.
+- model: `New` switch + config validation (unknown backend errors); no live call.
+- tools: read/write happy path + path-guard rejection, in a temp dir. Hermetic.
+- fix-test: FAKE `ToolCallingChatModel` (implements the eino interface, scripted to
+  emit a write_file tool call) + a temp git repo with a trivially-broken test →
+  assert fixed + committed-clean; second fake that makes a BAD edit → assert
+  rollback (tree restored, error returned). Hermetic — no network/model.
+- integration (`-tags integration`): real ollama model fixes a real broken test.
 
-## Definition of done (per doc §9)
-- Sample service runs through all four deterministic stages to a pushed image.
-- No agentic/LLM code on the pipeline path; `go vet` + `gofmt` clean.
-- Unit tests green by default; integration e2e verified once locally.
-- Independent review by OpenCode reviewer (`minimax-m3`) → `.agents/review.md`
-  before proposing the commit. Then branch + PR (no direct push to main).
+## Definition of done (§6 M2)
+Rollback verified on an unfixable broken test; successful fix on a trivial one;
+`internal/pipeline` still stdlib-only; gofmt/vet clean; unit tests hermetic + green;
+independent OpenCode review (minimax-m3, wrapped in timeout+monitor) before commit;
+branch + PR.
 
-## Out of scope (later milestones)
-Model factory, fix-test/fix-build/dockerfile-gen, classifier (M2–M4); deploy
-stage + Deployer(compose|k8s) + GitHub Actions + branch-gating (M5);
-Prometheus/Grafana/Eino callbacks (M6).
+## Out of scope
+Classifier/cost routing (M3); fix-build, generate-dockerfile, fix-workflow (M4);
+deploy + CI conveyor + branch-gating (M5); observability (M6).

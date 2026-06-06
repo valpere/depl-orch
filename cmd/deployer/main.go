@@ -10,7 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/valpere/depl-orch/internal/agent"
 	"github.com/valpere/depl-orch/internal/config"
+	"github.com/valpere/depl-orch/internal/model"
 	"github.com/valpere/depl-orch/internal/pipeline"
 )
 
@@ -32,6 +34,23 @@ func main() {
 	runner := &pipeline.Runner{
 		Stages: pipeline.DefaultStages(pipeline.DefaultCommander),
 		Log:    log,
+	}
+
+	// Opt-in bounded agentic recovery (fix-test). Off by default → deterministic.
+	if cfg.Recover {
+		mcfg, err := model.Load()
+		if err != nil {
+			log.Error("model config", "err", err)
+			os.Exit(2)
+		}
+		m, err := model.New(ctx, mcfg)
+		if err != nil {
+			log.Error("model init", "err", err)
+			os.Exit(2)
+		}
+		runner.Recoverer = &agent.FixTest{Model: m, Log: log}
+		runner.MaxRetries = cfg.MaxRetries
+		log.Info("agentic recovery enabled", "backend", mcfg.Backend, "model", mcfg.Model, "maxRetries", cfg.MaxRetries)
 	}
 
 	if err := runner.Run(ctx, st); err != nil {

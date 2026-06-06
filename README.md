@@ -13,9 +13,9 @@ design and roadmap, and [`AGENTS.md`](AGENTS.md) for agent/contributor rules.
 | Milestone | Scope | State |
 |-----------|-------|-------|
 | M0 | Scaffold (module, layout) | ✅ done |
-| **M1** | **Deterministic pipeline (build → test → docker-build → docker-push), no LLM** | ✅ done |
-| M2 | Backend-agnostic model factory + fix-test with rollback | ⏳ next |
-| M3 | Cost-aware classifier | — |
+| M1 | Deterministic pipeline (build → test → docker-build → docker-push), no LLM | ✅ done |
+| **M2** | **Backend-agnostic model factory + fix-test recovery with git rollback** | ✅ done |
+| M3 | Cost-aware classifier | ⏳ next |
 | M4 | More agentic steps (fix-build, generate-dockerfile, fix-workflow) | — |
 | M5 | Deploy stage (compose \| k8s) + GitHub Actions + branch-gating | — |
 | M6 | Observability (Eino callbacks → Prometheus → Grafana) | — |
@@ -45,6 +45,23 @@ Registry auth stays **out-of-band** (an existing `docker login` locally, or a
 login step in CI) — the orchestrator never reads credentials into code or logs.
 
 Exit code: `0` success, `1` pipeline failure, `2` configuration error.
+
+### Agentic recovery (M2, opt-in)
+
+Off by default — the pipeline is deterministic unless `DEPLOY_RECOVER=true`. When
+on, a failing **test** stage is handed to a bounded `fix-test` agent: it snapshots
+the tree, lets a model edit source (never tests) through repo-scoped read/write
+tools, re-runs `go test`, and **rolls back** if it can't fix it within the budget.
+Control flow stays plain Go; the model only fills in individual tool calls.
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `DEPLOY_RECOVER` | `false` | enable fix-test recovery |
+| `DEPLOY_MAX_RETRIES` | `1` | recovery attempts per stage |
+| `MODEL_BACKEND` | `ollama` | `ollama` \| `openai` \| `anthropic` |
+| `MODEL_ID` | *(required if recovering)* | model id, e.g. `qwen3-coder-next:cloud` |
+| `MODEL_BASE_URL` | Ollama local | endpoint |
+| `MODEL_API_KEY` | — | key for openai / anthropic |
 
 ## Development
 
