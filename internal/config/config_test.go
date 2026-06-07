@@ -13,13 +13,30 @@ func setenv(t *testing.T, pairs ...string) {
 }
 
 func TestLoad_RequiresDeployImage(t *testing.T) {
+	t.Setenv("DEPLOY_IMAGE", "") // ensure host env doesn't satisfy the requirement
 	if _, err := Load(); err == nil {
 		t.Error("expected error when DEPLOY_IMAGE is missing")
 	}
 }
 
 func TestLoad_Defaults(t *testing.T) {
-	setenv(t, "DEPLOY_IMAGE", "docker.io/pereval/app:test")
+	// Clear all optional vars so host environment doesn't override defaults.
+	setenv(t,
+		"DEPLOY_IMAGE", "docker.io/pereval/app:test",
+		"DEPLOY_WORKDIR", "",
+		"DEPLOY_DOCKERFILE", "",
+		"DEPLOY_PUSH", "",
+		"DEPLOY_RECOVER", "",
+		"DEPLOY_MAX_RETRIES", "",
+		"CLASSIFIER_MODEL_ID", "",
+		"CLASSIFIER_MAX_TOKENS", "",
+		"COMPLEX_MODEL_ID", "",
+		"DEPLOY_CHECK_WORKFLOW", "",
+		"DEPLOY_TARGET", "",
+		"COMPOSE_FILE", "",
+		"HELM_RELEASE", "",
+		"HELM_CHART", "",
+	)
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
