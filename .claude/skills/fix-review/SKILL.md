@@ -36,9 +36,11 @@ PR_NUMBER="${1:-$(gh pr view --json number --jq '.number' 2>/dev/null)}"
 BASE_BRANCH=$(gh pr view "$PR_NUMBER" --json baseRefName --jq '.baseRefName')
 
 API_URL=$(grep 'api_url:' "$CONFIG" | awk '{print $2}')
-MODEL_R1=$(grep -A1 'round_1:' "$CONFIG" | grep model | sed "s/.*{ model: //;s/ }//")
-MODEL_R2=$(grep -A1 'round_2:' "$CONFIG" | grep model | sed "s/.*{ model: //;s/ }//")
-MODEL_R3=$(grep -A1 'round_3:' "$CONFIG" | grep model | sed "s/.*{ model: //;s/ }//")
+MODEL_R1=$(grep 'round_1:' "$CONFIG" | sed "s/.*{ model: //;s/ }//")
+MODEL_R2=$(grep 'round_2:' "$CONFIG" | sed "s/.*{ model: //;s/ }//")
+MODEL_R3=$(grep 'round_3:' "$CONFIG" | sed "s/.*{ model: //;s/ }//")
+REST_OLLAMA_TIMEOUT=$(grep 'ollama_timeout_s:' "$CONFIG" | awk '{print $2}')
+export REST_OLLAMA_TIMEOUT
 
 RUN_DIR=$(mktemp -d -t fix-review-XXXX)
 echo "$RUN_DIR" > /tmp/fixreview-rundir

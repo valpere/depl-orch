@@ -4,6 +4,8 @@
 
 api_url: http://localhost:11434/api/chat
 
+ollama_timeout_s: 600
+
 reviewers:
   round_1: { model: minimax-m3:cloud }
   round_2: { model: kimi-k2.6:cloud }
