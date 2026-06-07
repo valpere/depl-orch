@@ -1,3 +1,41 @@
+# PR #9 review — 2026-06-07
+
+**Models:** minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud
+**Rounds:** 3 parallel via localhost:11434 (timeout=600s)
+**Arbiter:** Claude
+
+## Round results
+
+| Round | Model | Status | Findings |
+|-------|-------|--------|----------|
+| 1 | minimax-m3:cloud | ok | 3 |
+| 2 | kimi-k2.6:cloud | ok | 1 |
+| 3 | devstral-small-2:24b-cloud | ok | 3 |
+
+## Findings (votes = unique models)
+
+| File | Line | Layer | Sev | Votes | Ruling | Notes |
+|------|------|-------|-----|-------|--------|-------|
+| SKILL.md | 141 | 2 | warning | 2/3 | DEFER | Cross-reference where meta is written — doc improvement, not blocking |
+| SKILL.md | 142 | 2 | warning | 1/3 | DISMISS | Meta always written unconditionally by run_round; `wait` guarantees existence |
+| SKILL.md | 163 | 2 | warning | 1/3 | DISMISS | All findings tagged in Step 3 before write; empty arrays skip tagging |
+| SKILL.md | 152,164 | 3 | suggestion | 1/3 | DEFER | Document `models` field in prose |
+| SKILL.md | 162 | 4 | suggestion | 1/3 | DEFER | DRY `unique` in jq — not hot code |
+
+## Fixes applied
+
+None.
+
+## Gates
+
+go build ✓ · go vet ✓ · go test ✓ (20 tests, 5 packages)
+
+## Verdict
+
+**APPROVED**
+
+---
+
 # PR #8 review — 2026-06-07
 
 **Models:** minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud
