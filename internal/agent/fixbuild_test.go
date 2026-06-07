@@ -66,11 +66,7 @@ func TestFixBuild_FixesCompileError(t *testing.T) {
 
 func TestFixBuild_RollsBackOnModelError(t *testing.T) {
 	dir := brokenBuildRepo(t)
-	m := &fakeErrorModel{err: errLoopExhausted}
-	// Use a real error (not errLoopExhausted) to trigger rollback path.
-	m2 := &fakeErrorModel{err: context.DeadlineExceeded}
-	_ = m
-	fb := &FixBuild{Model: m2}
+	fb := &FixBuild{Model: &fakeErrorModel{err: context.DeadlineExceeded}}
 	st := stateForBuild(dir)
 	err := fb.Recover(context.Background(), st, "build", nil)
 	if err == nil {

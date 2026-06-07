@@ -34,7 +34,7 @@ func main() {
 
 	stages := pipeline.DefaultStages(pipeline.DefaultCommander)
 	if cfg.CheckWorkflow {
-		stages = append(stages, pipeline.WorkflowCheckStage(cfg.WorkDir))
+		stages = append(stages, agent.WorkflowCheckStage(cfg.WorkDir))
 	}
 
 	st := pipeline.NewState(cfg.WorkDir, cfg.Dockerfile, cfg.ImageRef, cfg.Push)

@@ -78,7 +78,8 @@ func (f *FixWorkflow) verifyWorkflows(root string) error {
 		return err
 	}
 	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".yml" {
+		ext := filepath.Ext(e.Name())
+		if e.IsDir() || (ext != ".yml" && ext != ".yaml") {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
