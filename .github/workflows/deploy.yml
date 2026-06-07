@@ -50,7 +50,8 @@ jobs:
           HELM_RELEASE: ${{ vars.HELM_RELEASE }}
           HELM_CHART: ${{ vars.HELM_CHART }}
 
-          # Registry credentials (set via docker/login-action before this step)
+          # Registry credentials — add a docker/login-action step before
+          # this one and set these secrets in repository settings.
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
         run: ./deployer

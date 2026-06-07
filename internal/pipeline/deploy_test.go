@@ -122,6 +122,21 @@ func TestSplitImageRef_NoTag(t *testing.T) {
 	}
 }
 
+func TestSplitImageRef_RegistryPortWithTag(t *testing.T) {
+	repo, tag := splitImageRef("registry:5000/myapp:v1")
+	if repo != "registry:5000/myapp" || tag != "v1" {
+		t.Errorf("got repo=%q tag=%q", repo, tag)
+	}
+}
+
+func TestSplitImageRef_RegistryPortNoTag(t *testing.T) {
+	// The colon is part of the registry:port, not a tag separator.
+	repo, tag := splitImageRef("registry:5000/myapp")
+	if repo != "registry:5000/myapp" || tag != "latest" {
+		t.Errorf("got repo=%q tag=%q", repo, tag)
+	}
+}
+
 // --- NewDeployer factory ---
 
 func TestNewDeployer_Compose(t *testing.T) {

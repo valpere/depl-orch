@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Deployer applies a pushed image to a live environment and can roll the
-// change back if a later step fails.
+// change back if Deploy fails.
 type Deployer interface {
 	// Name returns a short label used in log output and error messages.
 	Name() string
@@ -108,7 +109,11 @@ func (deployStage) Name() string { return "deploy" }
 
 func (s deployStage) Run(ctx context.Context, st *State) error {
 	if err := s.d.Deploy(ctx, st); err != nil {
-		_ = s.d.Rollback(ctx, st)
+		// Rollback uses a fresh context: the deploy ctx may be cancelled or
+		// timed out, which would cause rollback to fail immediately.
+		rctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		_ = s.d.Rollback(rctx, st)
 		st.Outputs["deploy"] = []byte(err.Error())
 		return fmt.Errorf("deploy (%s): %w", s.d.Name(), err)
 	}
@@ -116,11 +121,19 @@ func (s deployStage) Run(ctx context.Context, st *State) error {
 }
 
 // splitImageRef splits a full image reference into repository and tag.
-// "docker.io/myapp:v1" → ("docker.io/myapp", "v1")
-// "myapp" → ("myapp", "latest")
+// "docker.io/myapp:v1"          → ("docker.io/myapp", "v1")
+// "registry:5000/myapp:v1"      → ("registry:5000/myapp", "v1")
+// "registry:5000/myapp"         → ("registry:5000/myapp", "latest")
+// "myapp"                       → ("myapp", "latest")
+//
+// The heuristic: if the substring after the last colon contains a slash it is
+// a registry port (e.g. "5000/myapp"), not a tag.
 func splitImageRef(ref string) (repo, tag string) {
 	if i := strings.LastIndex(ref, ":"); i >= 0 {
-		return ref[:i], ref[i+1:]
+		candidate := ref[i+1:]
+		if !strings.Contains(candidate, "/") {
+			return ref[:i], candidate
+		}
 	}
 	return ref, "latest"
 }
