@@ -26,9 +26,9 @@ type Config struct {
 
 	// Classifier routing (M3). When ClassifierModelID is empty the triage step is
 	// skipped and every failure goes directly to FixTest with MODEL_ID.
-	ClassifierModelID    string // CLASSIFIER_MODEL_ID — cheap model for triage
-	ClassifierMaxTokens  int    // CLASSIFIER_MAX_TOKENS — response cap (default 256)
-	ComplexModelID       string // COMPLEX_MODEL_ID — strong model for complex failures (defaults to MODEL_ID)
+	ClassifierModelID   string // CLASSIFIER_MODEL_ID — cheap model for triage
+	ClassifierMaxTokens int    // CLASSIFIER_MAX_TOKENS — response cap (default 256)
+	ComplexModelID      string // COMPLEX_MODEL_ID — strong model for complex failures (defaults to MODEL_ID)
 }
 
 // Load reads the configuration from the environment.
