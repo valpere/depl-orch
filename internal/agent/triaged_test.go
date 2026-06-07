@@ -87,6 +87,26 @@ func TestTriagedRecovery_NotFixable(t *testing.T) {
 	}
 }
 
+func TestTriagedRecovery_ClassifierGenerateError(t *testing.T) {
+	// When Generate itself errors (network/timeout), Classifier returns Complex;
+	// TriagedRecovery must route to ComplexFixer, not fast-fail.
+	trivial := &fakeRecoverable{}
+	complex := &fakeRecoverable{}
+	tr := &TriagedRecovery{
+		Classifier:   &Classifier{Model: &fakeErrorModel{err: errors.New("timeout")}},
+		TrivialFixer: trivial,
+		ComplexFixer: complex,
+	}
+	st := &pipeline.State{Outputs: map[string][]byte{"test": []byte("fail")}}
+	_ = tr.Recover(context.Background(), st, "test", errors.New("fail"))
+	if !complex.called {
+		t.Error("generate error in classifier should route to ComplexFixer")
+	}
+	if trivial.called {
+		t.Error("TrivialFixer should NOT be called on classifier generate error")
+	}
+}
+
 func TestTriagedRecovery_GarbageDefaultsToComplex(t *testing.T) {
 	m := &fakeModel{responses: []*schema.Message{
 		schema.AssistantMessage("not json", nil),
