@@ -43,14 +43,54 @@ func main() {
 			log.Error("model config", "err", err)
 			os.Exit(2)
 		}
-		m, err := model.New(ctx, mcfg)
-		if err != nil {
-			log.Error("model init", "err", err)
-			os.Exit(2)
-		}
-		runner.Recoverer = &agent.FixTest{Model: m, Log: log}
 		runner.MaxRetries = cfg.MaxRetries
-		log.Info("agentic recovery enabled", "backend", mcfg.Backend, "model", mcfg.Model, "maxRetries", cfg.MaxRetries)
+
+		if cfg.ClassifierModelID != "" {
+			// M3: triage before fix-test — cheap classifier decides which fixer tier to use.
+			classifierCfg := mcfg
+			classifierCfg.Model = cfg.ClassifierModelID
+			classifierCfg.MaxTokens = cfg.ClassifierMaxTokens
+			cm, err := model.New(ctx, classifierCfg)
+			if err != nil {
+				log.Error("classifier model init", "err", err)
+				os.Exit(2)
+			}
+
+			trivialModel, err := model.New(ctx, mcfg)
+			if err != nil {
+				log.Error("trivial fixer model init", "err", err)
+				os.Exit(2)
+			}
+
+			complexCfg := mcfg
+			if cfg.ComplexModelID != "" {
+				complexCfg.Model = cfg.ComplexModelID
+			}
+			complexModel, err := model.New(ctx, complexCfg)
+			if err != nil {
+				log.Error("complex fixer model init", "err", err)
+				os.Exit(2)
+			}
+
+			runner.Recoverer = &agent.TriagedRecovery{
+				Classifier:   &agent.Classifier{Model: cm, Log: log},
+				TrivialFixer: &agent.FixTest{Model: trivialModel, Log: log},
+				ComplexFixer: &agent.FixTest{Model: complexModel, Log: log},
+				Log:          log,
+			}
+			log.Info("agentic recovery enabled", "mode", "triaged",
+				"classifier", cfg.ClassifierModelID, "trivial", mcfg.Model,
+				"complex", complexCfg.Model, "maxRetries", cfg.MaxRetries)
+		} else {
+			m, err := model.New(ctx, mcfg)
+			if err != nil {
+				log.Error("model init", "err", err)
+				os.Exit(2)
+			}
+			runner.Recoverer = &agent.FixTest{Model: m, Log: log}
+			log.Info("agentic recovery enabled", "mode", "direct",
+				"backend", mcfg.Backend, "model", mcfg.Model, "maxRetries", cfg.MaxRetries)
+		}
 	}
 
 	if err := runner.Run(ctx, st); err != nil {

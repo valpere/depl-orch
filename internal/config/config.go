@@ -23,14 +23,23 @@ type Config struct {
 	Push       bool   // push the built image to its registry
 	Recover    bool   // enable bounded agentic recovery (fix-test) on a failed stage
 	MaxRetries int    // recovery attempts per stage when Recover is on
+
+	// Classifier routing (M3). When ClassifierModelID is empty the triage step is
+	// skipped and every failure goes directly to FixTest with MODEL_ID.
+	ClassifierModelID    string // CLASSIFIER_MODEL_ID — cheap model for triage
+	ClassifierMaxTokens  int    // CLASSIFIER_MAX_TOKENS — response cap (default 256)
+	ComplexModelID       string // COMPLEX_MODEL_ID — strong model for complex failures (defaults to MODEL_ID)
 }
 
 // Load reads the configuration from the environment.
 //
-//	DEPLOY_WORKDIR     directory to operate on   (default ".")
-//	DEPLOY_DOCKERFILE  Dockerfile path           (default "Dockerfile")
-//	DEPLOY_IMAGE       full image reference       (required)
-//	DEPLOY_PUSH        push the image            (default "true")
+//	DEPLOY_WORKDIR          directory to operate on         (default ".")
+//	DEPLOY_DOCKERFILE       Dockerfile path                 (default "Dockerfile")
+//	DEPLOY_IMAGE            full image reference             (required)
+//	DEPLOY_PUSH             push the image                  (default "true")
+//	CLASSIFIER_MODEL_ID     cheap triage model id           (optional; skips triage when empty)
+//	CLASSIFIER_MAX_TOKENS   classifier response cap         (default 256)
+//	COMPLEX_MODEL_ID        strong model for complex fixes  (default MODEL_ID)
 func Load() (Config, error) {
 	push, err := getenvBool("DEPLOY_PUSH", true)
 	if err != nil {
@@ -41,12 +50,15 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DEPLOY_RECOVER: %w", err)
 	}
 	c := Config{
-		WorkDir:    getenv("DEPLOY_WORKDIR", "."),
-		Dockerfile: getenv("DEPLOY_DOCKERFILE", "Dockerfile"),
-		ImageRef:   strings.TrimSpace(os.Getenv("DEPLOY_IMAGE")),
-		Push:       push,
-		Recover:    doRecover,
-		MaxRetries: getenvInt("DEPLOY_MAX_RETRIES", 1),
+		WorkDir:             getenv("DEPLOY_WORKDIR", "."),
+		Dockerfile:          getenv("DEPLOY_DOCKERFILE", "Dockerfile"),
+		ImageRef:            strings.TrimSpace(os.Getenv("DEPLOY_IMAGE")),
+		Push:                push,
+		Recover:             doRecover,
+		MaxRetries:          getenvInt("DEPLOY_MAX_RETRIES", 1),
+		ClassifierModelID:   os.Getenv("CLASSIFIER_MODEL_ID"),
+		ClassifierMaxTokens: getenvInt("CLASSIFIER_MAX_TOKENS", 256),
+		ComplexModelID:      os.Getenv("COMPLEX_MODEL_ID"),
 	}
 	if c.ImageRef == "" {
 		return Config{}, fmt.Errorf("DEPLOY_IMAGE is required (e.g. docker.io/pereval/app:tag)")
