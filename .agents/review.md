@@ -1,3 +1,41 @@
+# PR #8 review — 2026-06-07
+
+**Models:** minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud
+**Rounds:** 3 parallel via localhost:11434 (timeout=600s)
+**Arbiter:** Claude
+
+## Round results
+
+| Round | Model | Status | Findings |
+|-------|-------|--------|----------|
+| 1 | minimax-m3:cloud | ok | 4 |
+| 2 | kimi-k2.6:cloud | ok | 3 |
+| 3 | devstral-small-2:24b-cloud | ok | 4 |
+
+## Findings
+
+| File | Line | Layer | Sev | Votes | Ruling | Notes |
+|------|------|-------|-----|-------|--------|-------|
+| SKILL.md | 39-41 | 1-2 | error | 5+1+1 | DISMISS | Models claimed `grep -A1` was more robust; actually it was the broken approach that pulled the next round's model name into the var (confirmed in PR #7 run) |
+| config.yaml | 6 | 1 | warning | 1 | DISMISS | "600s hardcoded" — entire purpose of this PR is making it configurable in config.yaml |
+| SKILL.md | 43 | 3 | suggestion | 1 | DISMISS | `REST_OLLAMA_TIMEOUT` documented in rest.sh header |
+| config.yaml | 7 | 3 | suggestion | 1 | DISMISS | Field name self-explanatory |
+| SKILL.md | 42 | 4 | suggestion | 1 | DEFER | grep\|awk fragile for quoted values — revisit if yq added |
+
+## Fixes applied
+
+None.
+
+## Gates
+
+go build ✓ · go vet ✓ · go test ✓ (20 tests, 5 packages)
+
+## Verdict
+
+**APPROVED**
+
+---
+
 # PR #7 review — 2026-06-06
 
 **Models:** minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud
