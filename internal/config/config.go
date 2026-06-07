@@ -32,6 +32,12 @@ type Config struct {
 
 	// M4: opt-in workflow YAML validation stage.
 	CheckWorkflow bool // DEPLOY_CHECK_WORKFLOW — validate .github/workflows/*.yml before push
+
+	// M5: deploy stage. Target == "" skips the stage (preserves M1 behaviour).
+	DeployTarget      string // DEPLOY_TARGET: "compose" | "k8s" | "" (skip)
+	DeployComposeFile string // COMPOSE_FILE — path to docker-compose file (default "docker-compose.yml")
+	DeployHelmRelease string // HELM_RELEASE — Helm release name (k8s target)
+	DeployHelmChart   string // HELM_CHART — Helm chart path or OCI ref (k8s target)
 }
 
 // Load reads the configuration from the environment.
@@ -44,6 +50,10 @@ type Config struct {
 //	CLASSIFIER_MAX_TOKENS   classifier response cap         (default 256)
 //	COMPLEX_MODEL_ID        strong model for complex fixes  (default MODEL_ID)
 //	DEPLOY_CHECK_WORKFLOW   validate .github/workflows/*.yml before push (default false)
+//	DEPLOY_TARGET           deploy target: "compose" | "k8s" | "" (skip; default "")
+//	COMPOSE_FILE            docker-compose file path                (default "docker-compose.yml")
+//	HELM_RELEASE            Helm release name                       (k8s target)
+//	HELM_CHART              Helm chart path or OCI ref              (k8s target)
 func Load() (Config, error) {
 	push, err := getenvBool("DEPLOY_PUSH", true)
 	if err != nil {
@@ -68,6 +78,10 @@ func Load() (Config, error) {
 		ClassifierMaxTokens: getenvInt("CLASSIFIER_MAX_TOKENS", 256),
 		ComplexModelID:      os.Getenv("COMPLEX_MODEL_ID"),
 		CheckWorkflow:       checkWorkflow,
+		DeployTarget:        strings.TrimSpace(os.Getenv("DEPLOY_TARGET")),
+		DeployComposeFile:   getenv("COMPOSE_FILE", "docker-compose.yml"),
+		DeployHelmRelease:   os.Getenv("HELM_RELEASE"),
+		DeployHelmChart:     os.Getenv("HELM_CHART"),
 	}
 	if c.ImageRef == "" {
 		return Config{}, fmt.Errorf("DEPLOY_IMAGE is required (e.g. docker.io/pereval/app:tag)")
