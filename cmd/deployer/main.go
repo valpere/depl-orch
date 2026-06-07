@@ -36,6 +36,18 @@ func main() {
 	if cfg.CheckWorkflow {
 		stages = append(stages, agent.WorkflowCheckStage(cfg.WorkDir))
 	}
+	if cfg.DeployTarget != "" {
+		deployer, err := pipeline.NewDeployer(cfg.DeployTarget, pipeline.DeployConfig{
+			ComposeFile: cfg.DeployComposeFile,
+			HelmRelease: cfg.DeployHelmRelease,
+			HelmChart:   cfg.DeployHelmChart,
+		}, pipeline.DefaultCommander)
+		if err != nil {
+			log.Error("deploy target", "err", err)
+			os.Exit(2)
+		}
+		stages = append(stages, pipeline.DeployStage(deployer))
+	}
 
 	st := pipeline.NewState(cfg.WorkDir, cfg.Dockerfile, cfg.ImageRef, cfg.Push)
 	runner := &pipeline.Runner{

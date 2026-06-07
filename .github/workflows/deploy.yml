@@ -1,0 +1,57 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deploy target'
+        required: true
+        default: 'compose'
+        type: choice
+        options:
+          - compose
+          - k8s
+
+jobs:
+  deploy:
+    name: deploy / ${{ inputs.target }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build deployer
+        run: go build -o deployer ./cmd/deployer
+
+      - name: Run pipeline + deploy
+        env:
+          # Image built and pushed in a prior step or workflow
+          DEPLOY_IMAGE: ${{ vars.DEPLOY_IMAGE }}
+          DEPLOY_PUSH: "true"
+
+          # Branch-gating: agentic recovery only on non-main branches.
+          # On main the pipeline is deterministic and fails fast.
+          DEPLOY_RECOVER: ${{ github.ref_name != 'main' && 'true' || 'false' }}
+          DEPLOY_MAX_RETRIES: ${{ github.ref_name != 'main' && '1' || '0' }}
+
+          # Recovery model (used when DEPLOY_RECOVER=true)
+          MODEL_BACKEND: ${{ vars.MODEL_BACKEND }}
+          MODEL_ID: ${{ vars.MODEL_ID }}
+          MODEL_BASE_URL: ${{ vars.MODEL_BASE_URL }}
+          MODEL_API_KEY: ${{ secrets.MODEL_API_KEY }}
+
+          # Deploy target
+          DEPLOY_TARGET: ${{ inputs.target }}
+          COMPOSE_FILE: docker-compose.yml
+          HELM_RELEASE: ${{ vars.HELM_RELEASE }}
+          HELM_CHART: ${{ vars.HELM_CHART }}
+
+          # Registry credentials — add a docker/login-action step before
+          # this one and set these secrets in repository settings.
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: ./deployer
