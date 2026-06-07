@@ -10,6 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	einomodel "github.com/cloudwego/eino/components/model"
+
 	"github.com/valpere/depl-orch/internal/agent"
 	"github.com/valpere/depl-orch/internal/config"
 	"github.com/valpere/depl-orch/internal/model"
@@ -30,13 +32,18 @@ func main() {
 		os.Exit(2)
 	}
 
+	stages := pipeline.DefaultStages(pipeline.DefaultCommander)
+	if cfg.CheckWorkflow {
+		stages = append(stages, agent.WorkflowCheckStage(cfg.WorkDir))
+	}
+
 	st := pipeline.NewState(cfg.WorkDir, cfg.Dockerfile, cfg.ImageRef, cfg.Push)
 	runner := &pipeline.Runner{
-		Stages: pipeline.DefaultStages(pipeline.DefaultCommander),
+		Stages: stages,
 		Log:    log,
 	}
 
-	// Opt-in bounded agentic recovery (fix-test). Off by default → deterministic.
+	// Opt-in bounded agentic recovery. Off by default → deterministic (M1 behaviour).
 	if cfg.Recover {
 		mcfg, err := model.Load()
 		if err != nil {
@@ -45,8 +52,21 @@ func main() {
 		}
 		runner.MaxRetries = cfg.MaxRetries
 
+		// M4: build a StageRecovery that dispatches to the right fixer per stage.
+		buildStageRecovery := func(m einomodel.ToolCallingChatModel) pipeline.Recoverable {
+			return &agent.StageRecovery{
+				Fixers: map[string]pipeline.Recoverable{
+					"test":         &agent.FixTest{Model: m, Log: log},
+					"build":        &agent.FixBuild{Model: m, Log: log},
+					"docker-build": &agent.GenerateDockerfile{Model: m, Log: log},
+					"workflow":     &agent.FixWorkflow{Model: m, Log: log},
+				},
+				Log: log,
+			}
+		}
+
 		if cfg.ClassifierModelID != "" {
-			// M3: triage before fix-test — cheap classifier decides which fixer tier to use.
+			// M3: triage before recovery — cheap classifier decides which tier to use.
 			classifierCfg := mcfg
 			classifierCfg.Model = cfg.ClassifierModelID
 			classifierCfg.MaxTokens = cfg.ClassifierMaxTokens
@@ -74,8 +94,8 @@ func main() {
 
 			runner.Recoverer = &agent.TriagedRecovery{
 				Classifier:   &agent.Classifier{Model: cm, Log: log},
-				TrivialFixer: &agent.FixTest{Model: trivialModel, Log: log},
-				ComplexFixer: &agent.FixTest{Model: complexModel, Log: log},
+				TrivialFixer: buildStageRecovery(trivialModel),
+				ComplexFixer: buildStageRecovery(complexModel),
 				Log:          log,
 			}
 			log.Info("agentic recovery enabled", "mode", "triaged",
@@ -87,7 +107,7 @@ func main() {
 				log.Error("model init", "err", err)
 				os.Exit(2)
 			}
-			runner.Recoverer = &agent.FixTest{Model: m, Log: log}
+			runner.Recoverer = buildStageRecovery(m)
 			log.Info("agentic recovery enabled", "mode", "direct",
 				"backend", mcfg.Backend, "model", mcfg.Model, "maxRetries", cfg.MaxRetries)
 		}
