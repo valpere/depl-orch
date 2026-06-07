@@ -138,7 +138,10 @@ for n in 1 2 3; do
     printf 'warn: round %s not a JSON array — 0 findings\n' "$n" >&2
     echo "[]" > "$RUN_DIR/round_${n}.findings.json"
   else
-    printf '%s' "$content" > "$RUN_DIR/round_${n}.findings.json"
+    # Tag each finding with the model name so Step 4 can count unique models per location.
+    model=$(cat "$RUN_DIR/round_${n}.meta")
+    printf '%s' "$content" | jq --arg m "$model" 'map(. + {model: $m})' \
+      > "$RUN_DIR/round_${n}.findings.json"
   fi
 done
 ```
@@ -147,6 +150,9 @@ done
 
 ## STEP 4: Aggregate — dedupe + vote count
 
+`votes` = number of **distinct models** that flagged the same (file, line).
+A model returning multiple findings for the same line still counts as 1 vote.
+
 ```bash
 jq -s '
   flatten
@@ -154,7 +160,8 @@ jq -s '
   | map({
       file:     .[0].file,
       line:     .[0].line,
-      votes:    length,
+      votes:    ([.[] | .model] | unique | length),
+      models:   ([.[] | .model] | unique),
       body:     ([.[] | .body] | sort_by(length) | last),
       severity: ([.[] | .severity] | if any(.=="error") then "error"
                                      elif any(.=="warning") then "warning"
