@@ -1,3 +1,49 @@
+# PR #10 review — 2026-06-07
+
+**Models:** minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud
+**Rounds:** 3 parallel via localhost:11434 (timeout=600s)
+**Arbiter:** Claude
+
+## Round results
+
+| Round | Model | Status | Findings |
+|-------|-------|--------|----------|
+| 1 | minimax-m3:cloud | ok | 7 |
+| 2 | kimi-k2.6:cloud | ok | 8 |
+| 3 | devstral-small-2:24b-cloud | ok | 0 |
+
+## Findings (votes = unique models)
+
+| File | Line | Layer | Sev | Votes | Ruling | Notes |
+|------|------|-------|-----|-------|--------|-------|
+| classify.go | 58 | 2 | warning | 1/3 | DISMISS | `Model` is a required field by design; no nil guard per project convention |
+| classify.go | 68 | 2 | warning | 1/3 | DISMISS | Error swallowing is intentional fail-safe: any LLM failure → Complex; error is logged |
+| triaged.go | 20 | 2 | warning | 1/3 | DISMISS | `Classify` always returns nil error by design; `_` is correct |
+| triaged.go | 30 | 2 | warning | 1/3 | DISMISS | Duplicate of above |
+| triaged_test.go | 1 | 3 | suggestion | 2/3 | CONFIRM | Missing test: `Generate` returning an error (network/timeout path through TriagedRecovery) |
+| classify_test.go | 1 | 3 | suggestion | 1/3 | CONFIRM (fold) | Same gap from classifier side — fixed together |
+| triaged.go | 14 | 3 | suggestion | 1/3 | DISMISS | Doc comment not required per project convention |
+| main.go | 67 | 4 | suggestion | 1/3 | DISMISS | Intentional: same model for both tiers when COMPLEX_MODEL_ID empty |
+| classify.go | 80 | 4 | suggestion | 1/3 | DEFER | Case-sensitive fence strip — revisit if needed |
+| classify_test.go | 107 | 4 | suggestion | 1/3 | DISMISS | Error intentionally ignored in test |
+| triaged_test.go | 101 | 4 | suggestion | 1/3 | DISMISS | Same |
+| triaged_test.go | 103 | 4 | suggestion | 1/3 | DISMISS | ComplexFixer.called asserted; other routing tests cover trivial path |
+
+## Fixes applied
+
+- `classify_test.go`: added `fakeErrorModel` + `TestClassifier_GenerateError`
+- `triaged_test.go`: added `TestTriagedRecovery_ClassifierGenerateError`
+
+## Gates
+
+go build ✓ · go vet ✓ · go test ✓ (32 tests, 5 packages)
+
+## Verdict
+
+**APPROVED_WITH_FIXES**
+
+---
+
 # PR #9 review — 2026-06-07
 
 **Models:** minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud
