@@ -3,7 +3,11 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // DefaultStages returns the M1 deterministic pipeline, in order, all sharing one
@@ -71,4 +75,48 @@ func tail(b []byte, n int) []byte {
 		return b
 	}
 	return b[len(b)-n:]
+}
+
+// WorkflowCheckStage returns an opt-in stage that validates all *.yml files
+// under .github/workflows/ as valid YAML. If the directory does not exist the
+// stage is a no-op. Add it to the runner's Stages slice when
+// DEPLOY_CHECK_WORKFLOW=true.
+func WorkflowCheckStage(dir string) Stage { return workflowCheckStage{dir} }
+
+type workflowCheckStage struct{ dir string }
+
+func (workflowCheckStage) Name() string { return "workflow" }
+
+func (s workflowCheckStage) Run(ctx context.Context, st *State) error {
+	wfDir := filepath.Join(s.dir, ".github", "workflows")
+	entries, err := os.ReadDir(wfDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // no workflows to check
+		}
+		return fmt.Errorf("workflow: read dir: %w", err)
+	}
+
+	var errs []string
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".yml" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(wfDir, e.Name()))
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", e.Name(), err))
+			continue
+		}
+		var out any
+		if err := yaml.Unmarshal(data, &out); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", e.Name(), err))
+		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+	msg := "workflow YAML validation failed:\n" + strings.Join(errs, "\n")
+	st.Outputs["workflow"] = []byte(msg)
+	return fmt.Errorf("%s", msg)
 }

@@ -29,6 +29,9 @@ type Config struct {
 	ClassifierModelID   string // CLASSIFIER_MODEL_ID — cheap model for triage
 	ClassifierMaxTokens int    // CLASSIFIER_MAX_TOKENS — response cap (default 256)
 	ComplexModelID      string // COMPLEX_MODEL_ID — strong model for complex failures (defaults to MODEL_ID)
+
+	// M4: opt-in workflow YAML validation stage.
+	CheckWorkflow bool // DEPLOY_CHECK_WORKFLOW — validate .github/workflows/*.yml before push
 }
 
 // Load reads the configuration from the environment.
@@ -40,6 +43,7 @@ type Config struct {
 //	CLASSIFIER_MODEL_ID     cheap triage model id           (optional; skips triage when empty)
 //	CLASSIFIER_MAX_TOKENS   classifier response cap         (default 256)
 //	COMPLEX_MODEL_ID        strong model for complex fixes  (default MODEL_ID)
+//	DEPLOY_CHECK_WORKFLOW   validate .github/workflows/*.yml before push (default false)
 func Load() (Config, error) {
 	push, err := getenvBool("DEPLOY_PUSH", true)
 	if err != nil {
@@ -48,6 +52,10 @@ func Load() (Config, error) {
 	doRecover, err := getenvBool("DEPLOY_RECOVER", false)
 	if err != nil {
 		return Config{}, fmt.Errorf("DEPLOY_RECOVER: %w", err)
+	}
+	checkWorkflow, err := getenvBool("DEPLOY_CHECK_WORKFLOW", false)
+	if err != nil {
+		return Config{}, fmt.Errorf("DEPLOY_CHECK_WORKFLOW: %w", err)
 	}
 	c := Config{
 		WorkDir:             getenv("DEPLOY_WORKDIR", "."),
@@ -59,6 +67,7 @@ func Load() (Config, error) {
 		ClassifierModelID:   os.Getenv("CLASSIFIER_MODEL_ID"),
 		ClassifierMaxTokens: getenvInt("CLASSIFIER_MAX_TOKENS", 256),
 		ComplexModelID:      os.Getenv("COMPLEX_MODEL_ID"),
+		CheckWorkflow:       checkWorkflow,
 	}
 	if c.ImageRef == "" {
 		return Config{}, fmt.Errorf("DEPLOY_IMAGE is required (e.g. docker.io/pereval/app:tag)")
