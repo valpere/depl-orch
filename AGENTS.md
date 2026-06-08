@@ -59,6 +59,7 @@ independent (cross-family) review or bulk → lane 3.
 | M5 | Deploy stage (Compose + k8s/Helm) + GH Actions deploy workflow | ✅ done |
 | M6 | Observability: Prometheus Pushgateway + Grafana dashboard + Eino token callbacks | ✅ done |
 | M7 | Health-check gate: poll /healthz after deploy until 2xx or timeout | ✅ done |
+| M8 | Auto-rollback gate: health-check failure triggers deployer rollback | ✅ done |
 
 ## Multi-tool handoff (state lives in files, not chat)
 - Plans go to `.agents/plan.md` before code is written.
