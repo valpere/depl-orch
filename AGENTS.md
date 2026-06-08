@@ -48,6 +48,17 @@ orchestrator must judge the output it receives), and don't make a strong model a
 Rule of thumb: hard/contextual → lane 1; mechanical no-judgment → lane 2;
 independent (cross-family) review or bulk → lane 3.
 
+## Milestones
+
+| # | Name | Status |
+|---|------|--------|
+| M1 | Deterministic pipeline (build→test→docker-build→docker-push) | ✅ done |
+| M2 | Model factory + bounded fix-test recovery + git rollback | ✅ done |
+| M3 | Classifier-based triage (cheap model routes easy vs complex failures) | ✅ done |
+| M4 | Extended recovery: fix-build, generate-dockerfile, fix-workflow | ✅ done |
+| M5 | Deploy stage (Compose + k8s/Helm) + GH Actions deploy workflow | ✅ done |
+| M6 | Observability: Prometheus Pushgateway + Grafana dashboard + Eino token callbacks | ✅ done |
+
 ## Multi-tool handoff (state lives in files, not chat)
 - Plans go to `.agents/plan.md` before code is written.
 - Implementation changelog goes to `.agents/changes.md` (files + why).

@@ -39,6 +39,13 @@ type Stage interface {
 	Run(ctx context.Context, st *State) error
 }
 
+// StageObserver receives timing and outcome data for each stage attempt.
+// Defined here so pipeline (stdlib-only) can reference it; implementations
+// live in the obs package.
+type StageObserver interface {
+	ObserveStageAttempt(stage string, elapsed time.Duration, err error)
+}
+
 // Runner executes stages in order, logging start/end/elapsed for each and
 // stopping at the first unrecovered failure.
 //
@@ -48,8 +55,9 @@ type Stage interface {
 type Runner struct {
 	Stages     []Stage
 	Log        *slog.Logger
-	Recoverer  Recoverable // optional; nil = deterministic fail-fast
-	MaxRetries int         // recovery attempts per stage (0 = no recovery)
+	Recoverer  Recoverable   // optional; nil = deterministic fail-fast
+	MaxRetries int           // recovery attempts per stage (0 = no recovery)
+	Observer   StageObserver // optional; nil = no metrics
 }
 
 // Run executes every stage in order. It returns the first stage error that could
@@ -75,6 +83,9 @@ func (r *Runner) runStage(ctx context.Context, log *slog.Logger, s Stage, st *St
 		log.Info("stage start", "stage", s.Name(), "attempt", attempt)
 		err := s.Run(ctx, st)
 		elapsed := time.Since(start)
+		if r.Observer != nil {
+			r.Observer.ObserveStageAttempt(s.Name(), elapsed, err)
+		}
 		if err == nil {
 			log.Info("stage ok", "stage", s.Name(), "attempt", attempt, "elapsed", elapsed.String())
 			return nil
