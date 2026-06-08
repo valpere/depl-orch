@@ -25,7 +25,9 @@ func NewMetrics() *Metrics {
 			Namespace: "depl_orch",
 			Name:      "stage_duration_seconds",
 			Help:      "Duration of each pipeline stage attempt in seconds.",
-			Buckets:   prometheus.DefBuckets,
+			// Custom buckets: pipeline stages range from sub-second (go build) to
+			// many minutes (docker build, deploy). DefBuckets top out at 10s.
+			Buckets: []float64{0.1, 0.5, 1, 5, 15, 30, 60, 120, 300, 600},
 		}, []string{"stage", "status"}),
 		stageAttempts: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: "depl_orch",
