@@ -40,6 +40,9 @@ func TestLoad_Defaults(t *testing.T) {
 		"METRICS_JOB_LABEL", "",
 		"METRICS_INPUT_COST_PER1M", "",
 		"METRICS_OUTPUT_COST_PER1M", "",
+		"DEPLOY_HEALTH_URL", "",
+		"DEPLOY_HEALTH_TIMEOUT", "",
+		"DEPLOY_HEALTH_INTERVAL", "",
 	)
 	cfg, err := Load()
 	if err != nil {
@@ -267,5 +270,25 @@ func TestLoad_HealthCheckFullConfig(t *testing.T) {
 	}
 	if cfg.HealthInterval != 10*1e9 {
 		t.Errorf("HealthInterval = %v, want 10s", cfg.HealthInterval)
+	}
+}
+
+func TestLoad_HealthCheckInvalidDurationFallsBack(t *testing.T) {
+	// getenvDuration silently falls back to the default on invalid input,
+	// consistent with getenvInt and getenvFloat.
+	setenv(t,
+		"DEPLOY_IMAGE", "img:tag",
+		"DEPLOY_HEALTH_TIMEOUT", "not-a-duration",
+		"DEPLOY_HEALTH_INTERVAL", "??",
+	)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("invalid duration should not cause error, got: %v", err)
+	}
+	if cfg.HealthTimeout != 60*1e9 {
+		t.Errorf("invalid HealthTimeout should fall back to 60s, got %v", cfg.HealthTimeout)
+	}
+	if cfg.HealthInterval != 5*1e9 {
+		t.Errorf("invalid HealthInterval should fall back to 5s, got %v", cfg.HealthInterval)
 	}
 }

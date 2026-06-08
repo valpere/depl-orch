@@ -49,8 +49,16 @@ func main() {
 			os.Exit(2)
 		}
 		stages = append(stages, pipeline.DeployStage(deployer))
-	}
-	if cfg.HealthURL != "" {
+		if cfg.HealthURL != "" {
+			// M8: wrap health-check with auto-rollback so a deployment that
+			// passes docker-push but fails health is automatically reverted.
+			stages = append(stages, pipeline.WithRollback(
+				pipeline.HealthCheckStage(cfg.HealthURL, cfg.HealthTimeout, cfg.HealthInterval),
+				deployer,
+			))
+		}
+	} else if cfg.HealthURL != "" {
+		// No deploy target — health-check runs standalone (no rollback possible).
 		stages = append(stages, pipeline.HealthCheckStage(cfg.HealthURL, cfg.HealthTimeout, cfg.HealthInterval))
 	}
 

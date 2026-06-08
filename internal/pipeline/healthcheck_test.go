@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -110,5 +111,66 @@ func TestHealthCheckStage_IntervalClampedWhenZero(t *testing.T) {
 	}
 	if err := s.Run(context.Background(), newState()); err != nil {
 		t.Errorf("expected success with zero interval, got: %v", err)
+	}
+}
+
+func TestHealthCheckStage_4xxIsNotSuccess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	s := HealthCheckStage(srv.URL, 150*time.Millisecond, 40*time.Millisecond)
+	err := s.Run(context.Background(), newState())
+	if err == nil {
+		t.Fatal("expected timeout error for 4xx response, got nil")
+	}
+}
+
+// funcStage is a test helper that wraps an arbitrary function as a Stage.
+type funcStage struct {
+	name string
+	fn   func(context.Context, *State) error
+}
+
+func (f funcStage) Name() string                            { return f.name }
+func (f funcStage) Run(ctx context.Context, st *State) error { return f.fn(ctx, st) }
+
+func TestRunner_HealthCheckRunsAfterDeploy(t *testing.T) {
+	var deployRan bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	deploy := funcStage{name: "deploy", fn: func(_ context.Context, _ *State) error {
+		deployRan = true
+		return nil
+	}}
+	r := &Runner{
+		Stages: []Stage{deploy, HealthCheckStage(srv.URL, 2*time.Second, 50*time.Millisecond)},
+		Log:    slog.Default(),
+	}
+	if err := r.Run(context.Background(), newState()); err != nil {
+		t.Fatalf("expected success: %v", err)
+	}
+	if !deployRan {
+		t.Error("deploy stage was not run before health-check")
+	}
+}
+
+func TestRunner_HealthCheckFailureFailsPipeline(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	r := &Runner{
+		Stages: []Stage{HealthCheckStage(srv.URL, 100*time.Millisecond, 30*time.Millisecond)},
+		Log:    slog.Default(),
+	}
+	err := r.Run(context.Background(), newState())
+	if err == nil {
+		t.Fatal("expected pipeline failure when health-check times out")
 	}
 }
