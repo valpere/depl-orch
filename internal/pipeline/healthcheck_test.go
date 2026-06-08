@@ -97,10 +97,18 @@ func TestHealthCheckStage_ConnectionErrorTimesOut(t *testing.T) {
 }
 
 func TestHealthCheckStage_IntervalClampedWhenZero(t *testing.T) {
-	// Zero interval should not spin-loop — clamped to 2s internally.
-	// Just verify it constructs without panic and returns the right Name().
-	s := HealthCheckStage("", 5*time.Second, 0)
-	if s.Name() != "health-check" {
-		t.Errorf("Name() = %q after zero interval", s.Name())
+	// Zero interval must be clamped to 2s — verify the stage succeeds without spin-looping.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	s := HealthCheckStage(srv.URL, 5*time.Second, 0)
+	hcs := s.(healthCheckStage)
+	if hcs.interval < 2*time.Second {
+		t.Errorf("interval not clamped: got %v, want ≥2s", hcs.interval)
+	}
+	if err := s.Run(context.Background(), newState()); err != nil {
+		t.Errorf("expected success with zero interval, got: %v", err)
 	}
 }

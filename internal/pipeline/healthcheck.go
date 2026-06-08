@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -40,6 +41,7 @@ func (s healthCheckStage) Run(ctx context.Context, _ *State) error {
 	for {
 		resp, err := client.Get(s.url) //nolint:noctx // context checked via deadline below
 		if err == nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
 			if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 				return nil
