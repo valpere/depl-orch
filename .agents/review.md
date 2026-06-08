@@ -1,4 +1,4 @@
-# PR #13 review — 2026-06-07
+# PR #14 review — 2026-06-08
 
 **Models:** minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud
 **Rounds:** 3 parallel via localhost:11434
@@ -8,24 +8,25 @@
 
 | File | Line | Layer | Sev | Votes | Ruling | Notes |
 |------|------|-------|-----|-------|--------|-------|
-| internal/config/config_test.go | 16 | 2 | warning | 1/3 | CONFIRM | TestLoad_RequiresDeployImage passes silently if host env has DEPLOY_IMAGE set |
-| internal/config/config_test.go | 22 | 2 | warning | 1/3 | CONFIRM | TestLoad_Defaults leaves host env vars intact; DEPLOY_PUSH=false on CI breaks Push assertion |
-| internal/config/config_test.go | 11 | 2 | suggestion | 1/3 | DISMISS | Odd-length panic in test helper — internal, hardcoded callers |
-| internal/config/config_test.go | 15 | 3 | warning | 1/3 | CONFIRM (fold) | Same root cause as line 16 |
-| internal/config/config_test.go | 108 | 3 | suggestion | 1/3 | DISMISS | Int fallback is intentional silent behavior |
-| internal/config/config_test.go | 110 | 3 | suggestion | 1/3 | DISMISS | Style noise |
-| internal/config/config_test.go | 21 | 3 | suggestion | 1/3 | DISMISS | Default coverage adequate |
-| internal/config/config_test.go | 71 | 4 | suggestion | 1/3 | DISMISS | L4/1/3 |
-| internal/config/config_test.go | 8 | 4 | suggestion | 1/3 | DISMISS (fold) | Same as #3 |
+| internal/obs/metrics.go | 28 | 2 | warning | 1/3 | CONFIRM | DefBuckets tops out at 10 s; pipeline stages (docker-build, deploy) run minutes — fix with custom buckets |
+| internal/obs/push.go | 13 | 2 | warning | 2/3 | DISMISS | Dual-layer defensive default — intentional; Push() guards direct API callers, config guards env-based callers |
+| go.mod | 84 | 2 | warning | 1/3 | DEFER | go.yaml.in/yaml/v2 typosquat flag — transitive dep from prometheus, not introduced by this PR; audit separately |
+| internal/config/config.go | 136 | 2 | warning | 1/3 | DISMISS | getenvFloat silent fallback consistent with getenvInt pattern; optional cost floats defaulting to 0 is safe |
+| internal/obs/obs_test.go | 1 | 3 | suggestion | 1/3 | DISMISS | SetRunInfo test gap — L3/1v |
+| internal/obs/obs_test.go | 116 | 3 | suggestion | 1/3 | DISMISS | Push httptest coverage — L3/1v |
+| internal/obs/push.go | 6 | 3 | suggestion | 1/3 | DISMISS | Same as above |
+| cmd/deployer/main.go | 53 | 4 | suggestion | 1/3 | DISMISS | Metrics always initialised by design — push no-ops when URL empty |
+| cmd/deployer/main.go | 67 | 4 | suggestion | 1/3 | DISMISS | Eino callback scoped to recover=true by design — no agent, no tokens |
+| internal/config/config.go | 133 | 4 | suggestion | 1/3 | DISMISS | Duplicate of finding on line 136 |
+| internal/obs/metrics.go | 61 | 4 | suggestion | 1/3 | DISMISS | run_info cardinality — acceptable for Pushgateway (per-job replace semantics) |
 
 ## Fixes applied
 
-1. **TestLoad_RequiresDeployImage** — added `t.Setenv("DEPLOY_IMAGE", "")` to ensure host env doesn't satisfy the requirement
-2. **TestLoad_Defaults** — cleared all optional env vars via `setenv(t, ...)` so host environment cannot override default assertions
+1. **metrics.go:28** — Replaced `prometheus.DefBuckets` with pipeline-appropriate custom buckets `[0.1, 0.5, 1, 5, 15, 30, 60, 120, 300, 600]` covering sub-second commands through 10-minute deploys
 
 ## Gates
 
-`go build ✓ · go vet ✓ · go test ✓ (70 tests, 5 packages)`
+`go build ✓ · go vet ✓ · go test ✓ (77 tests, 6 packages)`
 
 ## Verdict
 

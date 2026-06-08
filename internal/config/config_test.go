@@ -36,6 +36,10 @@ func TestLoad_Defaults(t *testing.T) {
 		"COMPOSE_FILE", "",
 		"HELM_RELEASE", "",
 		"HELM_CHART", "",
+		"METRICS_PUSHGATEWAY_URL", "",
+		"METRICS_JOB_LABEL", "",
+		"METRICS_INPUT_COST_PER1M", "",
+		"METRICS_OUTPUT_COST_PER1M", "",
 	)
 	cfg, err := Load()
 	if err != nil {

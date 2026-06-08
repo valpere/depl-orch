@@ -38,6 +38,12 @@ type Config struct {
 	DeployComposeFile string // COMPOSE_FILE — path to docker-compose file (default "docker-compose.yml")
 	DeployHelmRelease string // HELM_RELEASE — Helm release name (k8s target)
 	DeployHelmChart   string // HELM_CHART — Helm chart path or OCI ref (k8s target)
+
+	// M6: observability. Push is a no-op when MetricsPushgatewayURL is empty.
+	MetricsPushgatewayURL  string  // METRICS_PUSHGATEWAY_URL — Pushgateway endpoint (default "")
+	MetricsJobLabel        string  // METRICS_JOB_LABEL — Pushgateway job label (default "depl-orch")
+	MetricsInputCostPer1M  float64 // METRICS_INPUT_COST_PER1M — USD per 1M prompt tokens (default 0)
+	MetricsOutputCostPer1M float64 // METRICS_OUTPUT_COST_PER1M — USD per 1M completion tokens (default 0)
 }
 
 // Load reads the configuration from the environment.
@@ -68,20 +74,24 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("DEPLOY_CHECK_WORKFLOW: %w", err)
 	}
 	c := Config{
-		WorkDir:             getenv("DEPLOY_WORKDIR", "."),
-		Dockerfile:          getenv("DEPLOY_DOCKERFILE", "Dockerfile"),
-		ImageRef:            strings.TrimSpace(os.Getenv("DEPLOY_IMAGE")),
-		Push:                push,
-		Recover:             doRecover,
-		MaxRetries:          getenvInt("DEPLOY_MAX_RETRIES", 1),
-		ClassifierModelID:   os.Getenv("CLASSIFIER_MODEL_ID"),
-		ClassifierMaxTokens: getenvInt("CLASSIFIER_MAX_TOKENS", 256),
-		ComplexModelID:      os.Getenv("COMPLEX_MODEL_ID"),
-		CheckWorkflow:       checkWorkflow,
-		DeployTarget:        strings.TrimSpace(os.Getenv("DEPLOY_TARGET")),
-		DeployComposeFile:   getenv("COMPOSE_FILE", "docker-compose.yml"),
-		DeployHelmRelease:   os.Getenv("HELM_RELEASE"),
-		DeployHelmChart:     os.Getenv("HELM_CHART"),
+		WorkDir:                getenv("DEPLOY_WORKDIR", "."),
+		Dockerfile:             getenv("DEPLOY_DOCKERFILE", "Dockerfile"),
+		ImageRef:               strings.TrimSpace(os.Getenv("DEPLOY_IMAGE")),
+		Push:                   push,
+		Recover:                doRecover,
+		MaxRetries:             getenvInt("DEPLOY_MAX_RETRIES", 1),
+		ClassifierModelID:      os.Getenv("CLASSIFIER_MODEL_ID"),
+		ClassifierMaxTokens:    getenvInt("CLASSIFIER_MAX_TOKENS", 256),
+		ComplexModelID:         os.Getenv("COMPLEX_MODEL_ID"),
+		CheckWorkflow:          checkWorkflow,
+		DeployTarget:           strings.TrimSpace(os.Getenv("DEPLOY_TARGET")),
+		DeployComposeFile:      getenv("COMPOSE_FILE", "docker-compose.yml"),
+		DeployHelmRelease:      os.Getenv("HELM_RELEASE"),
+		DeployHelmChart:        os.Getenv("HELM_CHART"),
+		MetricsPushgatewayURL:  os.Getenv("METRICS_PUSHGATEWAY_URL"),
+		MetricsJobLabel:        getenv("METRICS_JOB_LABEL", "depl-orch"),
+		MetricsInputCostPer1M:  getenvFloat("METRICS_INPUT_COST_PER1M", 0),
+		MetricsOutputCostPer1M: getenvFloat("METRICS_OUTPUT_COST_PER1M", 0),
 	}
 	if c.ImageRef == "" {
 		return Config{}, fmt.Errorf("DEPLOY_IMAGE is required (e.g. docker.io/pereval/app:tag)")
@@ -118,4 +128,13 @@ func getenvBool(key string, def bool) (bool, error) {
 		return false, fmt.Errorf("invalid boolean %q: %w", v, err)
 	}
 	return b, nil
+}
+
+func getenvFloat(key string, def float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	}
+	return def
 }

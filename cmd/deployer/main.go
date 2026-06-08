@@ -10,11 +10,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/cloudwego/eino/callbacks"
 	einomodel "github.com/cloudwego/eino/components/model"
 
 	"github.com/valpere/depl-orch/internal/agent"
 	"github.com/valpere/depl-orch/internal/config"
 	"github.com/valpere/depl-orch/internal/model"
+	"github.com/valpere/depl-orch/internal/obs"
 	"github.com/valpere/depl-orch/internal/pipeline"
 )
 
@@ -49,14 +51,23 @@ func main() {
 		stages = append(stages, pipeline.DeployStage(deployer))
 	}
 
+	// M6: observability — wire metrics into the runner and register Eino callback.
+	m := obs.NewMetrics()
+	m.SetRunInfo(cfg.ImageRef, cfg.DeployTarget)
+
 	st := pipeline.NewState(cfg.WorkDir, cfg.Dockerfile, cfg.ImageRef, cfg.Push)
 	runner := &pipeline.Runner{
-		Stages: stages,
-		Log:    log,
+		Stages:   stages,
+		Log:      log,
+		Observer: &obs.PipelineObserver{Metrics: m},
 	}
 
 	// Opt-in bounded agentic recovery. Off by default → deterministic (M1 behaviour).
 	if cfg.Recover {
+		// Register Eino callback to record token usage. AppendGlobalHandlers is
+		// not thread-safe — call once here before any model invocations.
+		callbacks.AppendGlobalHandlers(obs.NewCallbackHandler(m,
+			cfg.MetricsInputCostPer1M, cfg.MetricsOutputCostPer1M))
 		mcfg, err := model.Load()
 		if err != nil {
 			log.Error("model config", "err", err)
@@ -114,19 +125,26 @@ func main() {
 				"classifier", cfg.ClassifierModelID, "trivial", mcfg.Model,
 				"complex", complexCfg.Model, "maxRetries", cfg.MaxRetries)
 		} else {
-			m, err := model.New(ctx, mcfg)
+			mdl, err := model.New(ctx, mcfg)
 			if err != nil {
 				log.Error("model init", "err", err)
 				os.Exit(2)
 			}
-			runner.Recoverer = buildStageRecovery(m)
+			runner.Recoverer = buildStageRecovery(mdl)
 			log.Info("agentic recovery enabled", "mode", "direct",
 				"backend", mcfg.Backend, "model", mcfg.Model, "maxRetries", cfg.MaxRetries)
 		}
 	}
 
-	if err := runner.Run(ctx, st); err != nil {
-		log.Error("pipeline failed", "err", err)
+	runErr := runner.Run(ctx, st)
+
+	// Push metrics regardless of pipeline outcome so partial runs are visible.
+	if pushErr := obs.Push(m, cfg.MetricsPushgatewayURL, cfg.MetricsJobLabel); pushErr != nil {
+		log.Warn("metrics push failed", "err", pushErr)
+	}
+
+	if runErr != nil {
+		log.Error("pipeline failed", "err", runErr)
 		os.Exit(1)
 	}
 	log.Info("pipeline ok", "image", cfg.ImageRef)
