@@ -3,7 +3,6 @@ package pipeline
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 )
@@ -79,8 +78,8 @@ func TestWithRollback_BothErrorsReportedWhenRollbackFails(t *testing.T) {
 	if !errors.Is(err, innerErr) {
 		t.Errorf("original error not wrapped: %v", err)
 	}
-	if !strings.Contains(err.Error(), rbErr.Error()) {
-		t.Errorf("rollback error not included in message: %v", err)
+	if !errors.Is(err, rbErr) {
+		t.Errorf("rollback error not wrapped (errors.Is): %v", err)
 	}
 }
 

@@ -33,7 +33,7 @@ func (r rollbackStage) Run(ctx context.Context, st *State) error {
 		rctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		if rbErr := r.deployer.Rollback(rctx, st); rbErr != nil {
-			return fmt.Errorf("%w; rollback also failed: %v", err, rbErr)
+			return fmt.Errorf("%w; rollback also failed: %w", err, rbErr)
 		}
 		return err
 	}
