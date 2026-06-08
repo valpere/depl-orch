@@ -133,7 +133,7 @@ type funcStage struct {
 	fn   func(context.Context, *State) error
 }
 
-func (f funcStage) Name() string                            { return f.name }
+func (f funcStage) Name() string                             { return f.name }
 func (f funcStage) Run(ctx context.Context, st *State) error { return f.fn(ctx, st) }
 
 func TestRunner_HealthCheckRunsAfterDeploy(t *testing.T) {

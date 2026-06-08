@@ -91,9 +91,9 @@ func TestWithRollback_FreshContextForRollback(t *testing.T) {
 	cancel() // already cancelled before Run is called
 
 	var (
-		rollbackCalledWithErr   error
+		rollbackCalledWithErr     error
 		rollbackHasFutureDeadline bool
-		called                  bool
+		called                    bool
 	)
 	rec := &rollbackRecorder{}
 	custom := &contextCapturingDeployer{rec: rec, capture: func(c context.Context) {
