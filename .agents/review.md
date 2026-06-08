@@ -1,4 +1,4 @@
-# PR #14 review — 2026-06-08
+# PR #15 review — 2026-06-08
 
 **Models:** minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud
 **Rounds:** 3 parallel via localhost:11434
@@ -8,25 +8,21 @@
 
 | File | Line | Layer | Sev | Votes | Ruling | Notes |
 |------|------|-------|-----|-------|--------|-------|
-| internal/obs/metrics.go | 28 | 2 | warning | 1/3 | CONFIRM | DefBuckets tops out at 10 s; pipeline stages (docker-build, deploy) run minutes — fix with custom buckets |
-| internal/obs/push.go | 13 | 2 | warning | 2/3 | DISMISS | Dual-layer defensive default — intentional; Push() guards direct API callers, config guards env-based callers |
-| go.mod | 84 | 2 | warning | 1/3 | DEFER | go.yaml.in/yaml/v2 typosquat flag — transitive dep from prometheus, not introduced by this PR; audit separately |
-| internal/config/config.go | 136 | 2 | warning | 1/3 | DISMISS | getenvFloat silent fallback consistent with getenvInt pattern; optional cost floats defaulting to 0 is safe |
-| internal/obs/obs_test.go | 1 | 3 | suggestion | 1/3 | DISMISS | SetRunInfo test gap — L3/1v |
-| internal/obs/obs_test.go | 116 | 3 | suggestion | 1/3 | DISMISS | Push httptest coverage — L3/1v |
-| internal/obs/push.go | 6 | 3 | suggestion | 1/3 | DISMISS | Same as above |
-| cmd/deployer/main.go | 53 | 4 | suggestion | 1/3 | DISMISS | Metrics always initialised by design — push no-ops when URL empty |
-| cmd/deployer/main.go | 67 | 4 | suggestion | 1/3 | DISMISS | Eino callback scoped to recover=true by design — no agent, no tokens |
-| internal/config/config.go | 133 | 4 | suggestion | 1/3 | DISMISS | Duplicate of finding on line 136 |
-| internal/obs/metrics.go | 61 | 4 | suggestion | 1/3 | DISMISS | run_info cardinality — acceptable for Pushgateway (per-job replace semantics) |
+| internal/pipeline/observer_test.go | 99 | 3 | suggestion | 1/3 | CONFIRM | `errors.Is(err, err)` is always true — `!errors.Is(err, err)` is dead code; removed tautology, dropped unused `errors` import |
+| internal/obs/obs_test.go | 163 | 2 | error | 1/3 | DISMISS | False positive — `testutil` import already present at line 11 |
+| test/e2e/e2e_test.go | 76 | 2 | suggestion | 1/3 | DISMISS | `GetCounter()` nil check overkill in test — metric family is always a CounterVec |
+| internal/config/config_test.go | 217 | 3 | suggestion | 1/3 | DISMISS | Both cost fields use same `getenvFloat` path; covering one is sufficient |
+| internal/obs/obs_test.go | 121 | 3 | suggestion | 1/3 | DISMISS | Push body assertion out of scope |
+| internal/pipeline/observer_test.go | 101 | 4 | suggestion | 1/3 | DISMISS | Fold into finding on line 99 |
+| test/e2e/e2e_test.go | 67 | 4 | suggestion | 1/3 | DISMISS | Fold into e2e GetCounter finding |
 
 ## Fixes applied
 
-1. **metrics.go:28** — Replaced `prometheus.DefBuckets` with pipeline-appropriate custom buckets `[0.1, 0.5, 1, 5, 15, 30, 60, 120, 300, 600]` covering sub-second commands through 10-minute deploys
+1. **observer_test.go:99** — Removed tautological `errors.Is(err, err)` assertion and unused `errors` import; replaced with comment explaining the test intent
 
 ## Gates
 
-`go build ✓ · go vet ✓ · go test ✓ (77 tests, 6 packages)`
+`go build ✓ · go vet ✓ · go test ✓ (88 tests, 6 packages)`
 
 ## Verdict
 

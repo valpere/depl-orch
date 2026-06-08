@@ -161,3 +161,67 @@ func TestLoad_DeployTargetTrimmed(t *testing.T) {
 		t.Errorf("DeployTarget not trimmed: %q", cfg.DeployTarget)
 	}
 }
+
+func TestLoad_MetricsDefaults(t *testing.T) {
+	setenv(t,
+		"DEPLOY_IMAGE", "img:tag",
+		"METRICS_PUSHGATEWAY_URL", "",
+		"METRICS_JOB_LABEL", "",
+		"METRICS_INPUT_COST_PER1M", "",
+		"METRICS_OUTPUT_COST_PER1M", "",
+	)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MetricsPushgatewayURL != "" {
+		t.Errorf("MetricsPushgatewayURL default = %q, want \"\"", cfg.MetricsPushgatewayURL)
+	}
+	if cfg.MetricsJobLabel != "depl-orch" {
+		t.Errorf("MetricsJobLabel default = %q, want \"depl-orch\"", cfg.MetricsJobLabel)
+	}
+	if cfg.MetricsInputCostPer1M != 0 {
+		t.Errorf("MetricsInputCostPer1M default = %v, want 0", cfg.MetricsInputCostPer1M)
+	}
+	if cfg.MetricsOutputCostPer1M != 0 {
+		t.Errorf("MetricsOutputCostPer1M default = %v, want 0", cfg.MetricsOutputCostPer1M)
+	}
+}
+
+func TestLoad_MetricsFullConfig(t *testing.T) {
+	setenv(t,
+		"DEPLOY_IMAGE", "img:tag",
+		"METRICS_PUSHGATEWAY_URL", "http://pushgateway:9091",
+		"METRICS_JOB_LABEL", "my-job",
+		"METRICS_INPUT_COST_PER1M", "1.5",
+		"METRICS_OUTPUT_COST_PER1M", "3.0",
+	)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MetricsPushgatewayURL != "http://pushgateway:9091" {
+		t.Errorf("MetricsPushgatewayURL = %q", cfg.MetricsPushgatewayURL)
+	}
+	if cfg.MetricsJobLabel != "my-job" {
+		t.Errorf("MetricsJobLabel = %q", cfg.MetricsJobLabel)
+	}
+	if cfg.MetricsInputCostPer1M != 1.5 {
+		t.Errorf("MetricsInputCostPer1M = %v, want 1.5", cfg.MetricsInputCostPer1M)
+	}
+	if cfg.MetricsOutputCostPer1M != 3.0 {
+		t.Errorf("MetricsOutputCostPer1M = %v, want 3.0", cfg.MetricsOutputCostPer1M)
+	}
+}
+
+func TestLoad_MetricsInvalidCostSilentlyFallsBack(t *testing.T) {
+	// getenvFloat silently falls back on invalid input (consistent with getenvInt).
+	setenv(t, "DEPLOY_IMAGE", "img:tag", "METRICS_INPUT_COST_PER1M", "not-a-float")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("invalid cost float should not cause error, got: %v", err)
+	}
+	if cfg.MetricsInputCostPer1M != 0 {
+		t.Errorf("invalid cost should fall back to 0, got %v", cfg.MetricsInputCostPer1M)
+	}
+}
