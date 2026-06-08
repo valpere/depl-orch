@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds the parameters for one pipeline run.
@@ -44,6 +45,11 @@ type Config struct {
 	MetricsJobLabel        string  // METRICS_JOB_LABEL — Pushgateway job label (default "depl-orch")
 	MetricsInputCostPer1M  float64 // METRICS_INPUT_COST_PER1M — USD per 1M prompt tokens (default 0)
 	MetricsOutputCostPer1M float64 // METRICS_OUTPUT_COST_PER1M — USD per 1M completion tokens (default 0)
+
+	// M7: health-check gate. Stage is skipped when HealthURL is empty.
+	HealthURL      string        // DEPLOY_HEALTH_URL — endpoint to poll after deploy (default "")
+	HealthTimeout  time.Duration // DEPLOY_HEALTH_TIMEOUT — give-up deadline (default 60s)
+	HealthInterval time.Duration // DEPLOY_HEALTH_INTERVAL — polling cadence (default 5s)
 }
 
 // Load reads the configuration from the environment.
@@ -92,6 +98,9 @@ func Load() (Config, error) {
 		MetricsJobLabel:        getenv("METRICS_JOB_LABEL", "depl-orch"),
 		MetricsInputCostPer1M:  getenvFloat("METRICS_INPUT_COST_PER1M", 0),
 		MetricsOutputCostPer1M: getenvFloat("METRICS_OUTPUT_COST_PER1M", 0),
+		HealthURL:              os.Getenv("DEPLOY_HEALTH_URL"),
+		HealthTimeout:          getenvDuration("DEPLOY_HEALTH_TIMEOUT", 60*time.Second),
+		HealthInterval:         getenvDuration("DEPLOY_HEALTH_INTERVAL", 5*time.Second),
 	}
 	if c.ImageRef == "" {
 		return Config{}, fmt.Errorf("DEPLOY_IMAGE is required (e.g. docker.io/pereval/app:tag)")
@@ -134,6 +143,15 @@ func getenvFloat(key string, def float64) float64 {
 	if v := os.Getenv(key); v != "" {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
+		}
+	}
+	return def
+}
+
+func getenvDuration(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
 		}
 	}
 	return def

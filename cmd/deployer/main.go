@@ -50,6 +50,9 @@ func main() {
 		}
 		stages = append(stages, pipeline.DeployStage(deployer))
 	}
+	if cfg.HealthURL != "" {
+		stages = append(stages, pipeline.HealthCheckStage(cfg.HealthURL, cfg.HealthTimeout, cfg.HealthInterval))
+	}
 
 	// M6: observability — wire metrics into the runner and register Eino callback.
 	m := obs.NewMetrics()

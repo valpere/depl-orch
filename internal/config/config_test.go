@@ -225,3 +225,47 @@ func TestLoad_MetricsInvalidCostSilentlyFallsBack(t *testing.T) {
 		t.Errorf("invalid cost should fall back to 0, got %v", cfg.MetricsInputCostPer1M)
 	}
 }
+
+func TestLoad_HealthCheckDefaults(t *testing.T) {
+	setenv(t,
+		"DEPLOY_IMAGE", "img:tag",
+		"DEPLOY_HEALTH_URL", "",
+		"DEPLOY_HEALTH_TIMEOUT", "",
+		"DEPLOY_HEALTH_INTERVAL", "",
+	)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HealthURL != "" {
+		t.Errorf("HealthURL default = %q, want \"\"", cfg.HealthURL)
+	}
+	if cfg.HealthTimeout != 60*1e9 {
+		t.Errorf("HealthTimeout default = %v, want 60s", cfg.HealthTimeout)
+	}
+	if cfg.HealthInterval != 5*1e9 {
+		t.Errorf("HealthInterval default = %v, want 5s", cfg.HealthInterval)
+	}
+}
+
+func TestLoad_HealthCheckFullConfig(t *testing.T) {
+	setenv(t,
+		"DEPLOY_IMAGE", "img:tag",
+		"DEPLOY_HEALTH_URL", "http://app:8080/healthz",
+		"DEPLOY_HEALTH_TIMEOUT", "2m",
+		"DEPLOY_HEALTH_INTERVAL", "10s",
+	)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HealthURL != "http://app:8080/healthz" {
+		t.Errorf("HealthURL = %q", cfg.HealthURL)
+	}
+	if cfg.HealthTimeout != 2*60*1e9 {
+		t.Errorf("HealthTimeout = %v, want 2m", cfg.HealthTimeout)
+	}
+	if cfg.HealthInterval != 10*1e9 {
+		t.Errorf("HealthInterval = %v, want 10s", cfg.HealthInterval)
+	}
+}
