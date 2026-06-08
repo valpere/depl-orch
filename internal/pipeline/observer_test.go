@@ -2,7 +2,6 @@ package pipeline
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 )
@@ -98,7 +97,5 @@ func TestRunner_NilObserverOnFailureDoesNotPanic(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when stage fails")
 	}
-	if !errors.Is(err, err) { // trivially true — just confirm we got here without panic
-		t.Error("unreachable")
-	}
+	// Reaching here without a nil-pointer panic is the assertion.
 }
