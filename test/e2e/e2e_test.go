@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/valpere/depl-orch/internal/obs"
 	"github.com/valpere/depl-orch/internal/pipeline"
 )
 
@@ -40,9 +41,39 @@ func TestPipelineEndToEnd(t *testing.T) {
 		push, _ = strconv.ParseBool(v)
 	}
 
+	m := obs.NewMetrics()
 	st := pipeline.NewState(workDir, "Dockerfile", image, push)
-	runner := &pipeline.Runner{Stages: pipeline.DefaultStages(pipeline.DefaultCommander)}
+	runner := &pipeline.Runner{
+		Stages:   pipeline.DefaultStages(pipeline.DefaultCommander),
+		Observer: &obs.PipelineObserver{Metrics: m},
+	}
 	if err := runner.Run(context.Background(), st); err != nil {
 		t.Fatalf("pipeline failed: %v", err)
+	}
+
+	// Regression: observer must not break the pipeline and must record each stage.
+	// We expect at least 3 stages (build, test, docker-build); push adds a 4th.
+	minStages := 3
+	if push {
+		minStages = 4
+	}
+	mfs, err := m.Gather()
+	if err != nil {
+		t.Fatalf("metrics gather: %v", err)
+	}
+	var attemptTotal float64
+	for _, mf := range mfs {
+		if mf.GetName() == "depl_orch_stage_attempts_total" {
+			for _, metric := range mf.GetMetric() {
+				for _, lp := range metric.GetLabel() {
+					if lp.GetName() == "status" && lp.GetValue() == "ok" {
+						attemptTotal += metric.GetCounter().GetValue()
+					}
+				}
+			}
+		}
+	}
+	if int(attemptTotal) < minStages {
+		t.Errorf("observer recorded %v ok attempts, want at least %d", attemptTotal, minStages)
 	}
 }

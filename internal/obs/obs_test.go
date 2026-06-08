@@ -3,6 +3,9 @@ package obs
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,5 +115,53 @@ func TestPush_NoopWhenEmpty(t *testing.T) {
 	m := NewMetrics()
 	if err := Push(m, "", ""); err != nil {
 		t.Errorf("Push with empty URL should be a no-op, got err: %v", err)
+	}
+}
+
+func TestPush_SendsToGateway(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	m := NewMetrics()
+	if err := Push(m, srv.URL, "test-job"); err != nil {
+		t.Fatalf("Push returned error: %v", err)
+	}
+	if gotMethod != http.MethodPut {
+		t.Errorf("expected PUT, got %s", gotMethod)
+	}
+	if !strings.Contains(gotPath, "/metrics/job/test-job") {
+		t.Errorf("unexpected push path: %s", gotPath)
+	}
+}
+
+func TestPush_DefaultJobLabelWhenEmpty(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	m := NewMetrics()
+	if err := Push(m, srv.URL, ""); err != nil {
+		t.Fatalf("Push returned error: %v", err)
+	}
+	if !strings.Contains(gotPath, "/metrics/job/depl-orch") {
+		t.Errorf("expected default job label 'depl-orch' in path, got: %s", gotPath)
+	}
+}
+
+func TestMetrics_SetRunInfo(t *testing.T) {
+	m := NewMetrics()
+	m.SetRunInfo("docker.io/app:v1", "compose")
+
+	// Verify the gauge is set to 1 for the given labels.
+	if got := testutil.ToFloat64(m.runInfo.WithLabelValues("docker.io/app:v1", "compose")); got != 1 {
+		t.Errorf("runInfo{docker.io/app:v1,compose} = %v, want 1", got)
 	}
 }

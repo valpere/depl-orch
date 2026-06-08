@@ -3,7 +3,11 @@
 // the pipeline.StageObserver interface.
 package obs
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	dto "github.com/prometheus/client_model/go"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 // Metrics holds all instrumentation for one pipeline run. Each instance uses
 // its own registry so tests can create isolated instances without global state.
@@ -61,4 +65,10 @@ func NewMetrics() *Metrics {
 // SetRunInfo records a run_info gauge with value 1 labelled by image and deploy target.
 func (m *Metrics) SetRunInfo(image, target string) {
 	m.runInfo.WithLabelValues(image, target).Set(1)
+}
+
+// Gather collects all metrics from the registry. Used by tests and e2e
+// verification to assert metrics were recorded.
+func (m *Metrics) Gather() ([]*dto.MetricFamily, error) {
+	return m.reg.Gather()
 }
