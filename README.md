@@ -59,7 +59,7 @@ Control flow stays plain Go; the model only fills in individual tool calls.
 | `DEPLOY_RECOVER` | `false` | enable fix-test recovery |
 | `DEPLOY_MAX_RETRIES` | `1` | recovery attempts per stage |
 | `MODEL_BACKEND` | `ollama` | `ollama` \| `openai` \| `anthropic` |
-| `MODEL_ID` | *(required if recovering)* | model id, e.g. `qwen3-coder-next:cloud` |
+| `MODEL_ID` | *(required if recovering)* | model id, e.g. `qwen3.5:cloud` |
 | `MODEL_BASE_URL` | Ollama local | endpoint |
 | `MODEL_API_KEY` | — | key for openai / anthropic |
 

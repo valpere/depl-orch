@@ -7,8 +7,7 @@
       "name": "Ollama (Pro cloud)",
       "options": { "baseURL": "http://localhost:11434/v1" },
       "models": {
-        "qwen3-coder-next:cloud": { "tools": true },
-        "devstral-small-2:24b-cloud": { "tools": true },
+        "gemma4:31b-cloud": { "tools": true },
         "qwen3.5:cloud": { "tools": true },
         "minimax-m3:cloud": { "tools": true },
         "kimi-k2.6:cloud": { "tools": true }
@@ -20,7 +19,7 @@
     "coder": {
       "description": "Implements code changes per .agents/plan.md. Writes a changelog to .agents/changes.md.",
       "mode": "subagent",
-      "model": "ollama/qwen3-coder-next:cloud",
+      "model": "ollama/qwen3.5:cloud",
       "temperature": 0.1,
       "tools": { "write": true, "edit": true, "bash": true }
     },
@@ -34,7 +33,7 @@
     "tester": {
       "description": "Runs go test, diagnoses failures, applies minimal fixes. Writes .agents/test-report.md.",
       "mode": "primary",
-      "model": "ollama/devstral-small-2:24b-cloud",
+      "model": "ollama/gemma4:31b-cloud",
       "temperature": 0.1,
       "tools": { "write": true, "edit": true, "bash": true }
     },

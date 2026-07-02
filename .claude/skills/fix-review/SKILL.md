@@ -14,7 +14,7 @@ Claude adjudicates. Result committed to `.agents/review.md` (per AGENTS.md §3).
 ```
 diff ──┬── Round 1 (minimax-m3:cloud)         ┐
        ├── Round 2 (kimi-k2.6:cloud)           ├── aggregate → Arbiter → fix → gates → review.md → merge
-       └── Round 3 (devstral-small-2:24b-cloud)┘
+       └── Round 3 (gemma4:31b-cloud)┘
 ```
 
 ## RUN COMPLETION CONTRACT
@@ -234,7 +234,7 @@ Write `.agents/review.md`:
 ```markdown
 # PR #N review — YYYY-MM-DD
 
-**Models:** minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud
+**Models:** minimax-m3:cloud · kimi-k2.6:cloud · gemma4:31b-cloud
 **Rounds:** 3 parallel via localhost:11434
 **Arbiter:** Claude
 
@@ -282,7 +282,7 @@ One row per model round + one arbiter row:
 ```jsonl
 {"ts":"...","pr":N,"run_dir":"...","round":1,"model":"minimax-m3:cloud","findings":N,"status":"ok|error","ms":N}
 {"ts":"...","pr":N,"run_dir":"...","round":2,"model":"kimi-k2.6:cloud","findings":N,"status":"ok|error","ms":N}
-{"ts":"...","pr":N,"run_dir":"...","round":3,"model":"devstral-small-2:24b-cloud","findings":N,"status":"ok|error","ms":N}
+{"ts":"...","pr":N,"run_dir":"...","round":3,"model":"gemma4:31b-cloud","findings":N,"status":"ok|error","ms":N}
 {"ts":"...","pr":N,"run_dir":"...","role":"arbiter","model":"claude","confirmed":N,"dismissed":N,"deferred":N,"fixes_applied":N,"merged":true|false}
 ```
 
@@ -309,7 +309,7 @@ Print to user:
 
 | | |
 |---|---|
-| Models | minimax-m3:cloud · kimi-k2.6:cloud · devstral-small-2:24b-cloud |
+| Models | minimax-m3:cloud · kimi-k2.6:cloud · gemma4:31b-cloud |
 | Findings | total / confirmed / dismissed / deferred |
 | Fixes applied | N |
 | Gates | pass / fail |
