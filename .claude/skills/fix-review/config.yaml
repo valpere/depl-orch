@@ -9,7 +9,7 @@ ollama_timeout_s: 600
 reviewers:
   round_1: { model: minimax-m3:cloud }
   round_2: { model: kimi-k2.6:cloud }
-  round_3: { model: devstral-small-2:24b-cloud }
+  round_3: { model: gemma4:31b-cloud }
 
 telemetry_enabled: true
 telemetry_file: .claude/skills/fix-review/telemetry.jsonl
