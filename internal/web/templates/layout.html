@@ -1,0 +1,42 @@
+{{define "layout"}}<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Depl-Orch Admin</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    nav .brand { font-weight: 700; }
+    .diff {
+      background: #f4f6f8;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 0.9em;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.15em 0.5em;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.85em;
+      font-weight: 600;
+      background: #10b981;
+    }
+  </style>
+</head>
+<body>
+  <nav class="container">
+    <ul>
+      <li><a href="/" class="brand">Depl-Orch Admin</a></li>
+    </ul>
+    <ul>
+      <li><a href="/">Dashboard</a></li>
+    </ul>
+  </nav>
+  <main class="container">
+    {{template "content" .}}
+  </main>
+</body>
+</html>{{end}}
