@@ -62,7 +62,7 @@ func (f *FixBuild) Recover(ctx context.Context, st *pipeline.State, stage string
 	}
 
 	if diffOut, err := pipeline.DefaultCommander.Run(ctx, root, "git", "diff", snapshot); err == nil && len(diffOut) > 0 {
-		appendHistory(root, HistoryItem{Stage: "build", Error: failing, Diff: string(diffOut), Timestamp: time.Now()})
+		appendHistory(log, root, HistoryItem{Stage: "build", Error: failing, Diff: string(diffOut), Timestamp: time.Now()})
 	}
 
 	f.writeRationale(root, failing)

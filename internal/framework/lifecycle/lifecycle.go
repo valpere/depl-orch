@@ -1,6 +1,6 @@
 // Package lifecycle provides coordinated startup and graceful shutdown
-// for services. Services are started in registration order and stopped
-// in reverse order.
+// for services. Services start concurrently (launched in registration
+// order); they are stopped in reverse registration order.
 package lifecycle
 
 import (
@@ -76,8 +76,8 @@ func New(name string, logger *slog.Logger, opts ...Option) *App {
 	}
 }
 
-// Register adds a service. Services start in registration order
-// and stop in reverse order.
+// Register adds a service. Services start concurrently (launched in
+// registration order); they are stopped in reverse registration order.
 func (a *App) Register(svc Service) {
 	a.services = append(a.services, svc)
 }

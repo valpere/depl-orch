@@ -47,6 +47,6 @@ haiku: ## Run stateless Haiku tool lane
 
 clean: ## Clean up transient scratch files
 	rm -rf .agents/scratch/*
-	find . -type d -name "_*" -prune -exec rm -rf {} +
-	find . -type f -name "_*" -delete
+	find .agents -type d -name "_*" -prune -exec rm -rf {} +
+	find .agents -type f -name "_*" -delete
 

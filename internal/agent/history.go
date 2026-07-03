@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,21 +18,30 @@ type HistoryItem struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-// appendHistory writes a successful fix to .agents/fix-history.jsonl
-func appendHistory(root string, item HistoryItem) {
+// appendHistory writes a successful fix to .agents/fix-history.jsonl.
+// Persistence failures are logged, not fatal — losing a history entry must
+// not fail the recovery that already succeeded.
+func appendHistory(log *slog.Logger, root string, item HistoryItem) {
 	dir := filepath.Join(root, ".agents")
-	_ = os.MkdirAll(dir, 0o755)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Warn("fix-history: mkdir failed", "dir", dir, "err", err)
+		return
+	}
 
 	f, err := os.OpenFile(filepath.Join(dir, "fix-history.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
+		log.Warn("fix-history: open failed", "err", err)
 		return
 	}
 	defer f.Close()
 
 	b, err := json.Marshal(item)
-	if err == nil {
-		f.Write(b)
-		f.WriteString("\n")
+	if err != nil {
+		log.Warn("fix-history: marshal failed", "err", err)
+		return
+	}
+	if _, err := f.Write(append(b, '\n')); err != nil {
+		log.Warn("fix-history: write failed", "err", err)
 	}
 }
 
@@ -45,6 +55,7 @@ func buildHistoryPrompt(root, stage string) string {
 
 	var items []HistoryItem
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024) // diffs can exceed the 64KB default
 	for scanner.Scan() {
 		var item HistoryItem
 		if err := json.Unmarshal(scanner.Bytes(), &item); err == nil {
