@@ -52,11 +52,11 @@ START_S=$(date +%s)
 ## STEP 1: Build prompt
 
 Load project context from `AGENTS.md` (first 150 lines).
-Build diff: `git diff $(git merge-base HEAD origin/${BASE_BRANCH})...HEAD`.
+Build diff: `gh pr diff "${PR_NUMBER}"`.
 
 ```bash
 PROJECT_CONTEXT=$(head -150 AGENTS.md)
-DIFF=$(git diff "$(git merge-base HEAD "origin/${BASE_BRANCH}")...HEAD")
+DIFF=$(gh pr diff "${PR_NUMBER}")
 printf '%s' "$DIFF" > "$RUN_DIR/diff.txt"
 
 REVIEW_SYSTEM="You are a senior code reviewer. Your entire response MUST be a raw JSON array — nothing else. Start with [ and end with ]. No prose, no markdown fences. If no issues: []"
