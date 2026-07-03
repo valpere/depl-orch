@@ -15,18 +15,35 @@ import (
 
 	"github.com/valpere/depl-orch/internal/agent"
 	"github.com/valpere/depl-orch/internal/config"
+	"github.com/valpere/depl-orch/internal/framework/lifecycle"
 	"github.com/valpere/depl-orch/internal/model"
 	"github.com/valpere/depl-orch/internal/obs"
 	"github.com/valpere/depl-orch/internal/pipeline"
 )
+
+type pipelineSvc struct {
+	runner *pipeline.Runner
+	st     *pipeline.State
+	cancel context.CancelFunc
+}
+
+func (p *pipelineSvc) Name() string { return "pipeline" }
+func (p *pipelineSvc) Start(ctx context.Context) error {
+	err := p.runner.Run(ctx, p.st)
+	if err == nil {
+		p.cancel()
+	}
+	return err
+}
+func (p *pipelineSvc) Stop(ctx context.Context) error { return nil }
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 
 	// Propagate cancellation (Ctrl-C locally, SIGTERM from a cancelled CI run) to
 	// the in-flight stage so docker/go don't keep running orphaned.
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -147,14 +164,21 @@ func main() {
 		}
 	}
 
-	runErr := runner.Run(ctx, st)
+	app := lifecycle.New("deployer", log)
+	app.Register(&pipelineSvc{
+		runner: runner,
+		st:     st,
+		cancel: cancel,
+	})
 
-	// Push metrics regardless of pipeline outcome so partial runs are visible.
-	if pushErr := obs.Push(m, cfg.MetricsPushgatewayURL, cfg.MetricsJobLabel); pushErr != nil {
-		log.Warn("metrics push failed", "err", pushErr)
-	}
+	app.RegisterCloser(lifecycle.CloserFunc(func(ctx context.Context) error {
+		if pushErr := obs.Push(m, cfg.MetricsPushgatewayURL, cfg.MetricsJobLabel); pushErr != nil {
+			log.Warn("metrics push failed", "err", pushErr)
+		}
+		return nil
+	}))
 
-	if runErr != nil {
+	if runErr := app.Run(ctx); runErr != nil {
 		log.Error("pipeline failed", "err", runErr)
 		os.Exit(1)
 	}

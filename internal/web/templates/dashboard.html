@@ -1,0 +1,28 @@
+{{define "content"}}
+<h2>Agentic Recovery History</h2>
+<p>Monitoring successful pipeline fixes from <code>.agents/fix-history.jsonl</code>.</p>
+
+{{if not .History}}
+  <article>
+    <p>No agentic recovery history found. The pipeline is running smoothly or recovery hasn't succeeded yet.</p>
+  </article>
+{{else}}
+  {{range .History}}
+  <article>
+    <header>
+      <strong>Stage:</strong> <span class="badge">{{.Stage}}</span>
+      <span style="float:right; color:var(--pico-muted-color);">{{.Timestamp.Format "Jan 02, 15:04:05"}}</span>
+    </header>
+    <details>
+      <summary>Original Error</summary>
+      <pre><code>{{.Error}}</code></pre>
+    </details>
+    <details open>
+      <summary>Successful Fix (Diff)</summary>
+      <pre class="diff"><code>{{.Diff}}</code></pre>
+    </details>
+  </article>
+  {{end}}
+{{end}}
+
+{{end}}
