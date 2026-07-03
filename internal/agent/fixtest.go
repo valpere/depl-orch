@@ -50,8 +50,9 @@ func (f *FixTest) Recover(ctx context.Context, st *pipeline.State, stage string,
 	}
 
 	failing := string(st.Outputs["test"])
+	historyPrompt := buildHistoryPrompt(root, "test")
 	msgs := []*schema.Message{
-		schema.SystemMessage(systemPrompt),
+		schema.SystemMessage(systemPrompt + historyPrompt),
 		schema.UserMessage("`go test ./...` failed:\n\n" + failing + "\n\nFix the source so the tests pass. Do not modify test files."),
 	}
 
@@ -69,6 +70,10 @@ func (f *FixTest) Recover(ctx context.Context, st *pipeline.State, stage string,
 	if out, err := pipeline.DefaultCommander.Run(ctx, root, "go", "test", "./..."); err != nil {
 		_ = gitRollback(ctx, root, snapshot)
 		return fmt.Errorf("fix-test did not make tests pass: %w (rolled back)\n%s", err, tailString(out, 1000))
+	}
+
+	if diffOut, err := pipeline.DefaultCommander.Run(ctx, root, "git", "diff", snapshot); err == nil && len(diffOut) > 0 {
+		appendHistory(root, HistoryItem{Stage: "test", Error: failing, Diff: string(diffOut), Timestamp: time.Now()})
 	}
 
 	f.writeRationale(root, failing)

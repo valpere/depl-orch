@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
@@ -69,11 +68,7 @@ func (c *Classifier) Classify(ctx context.Context, stage, output string) (Classi
 		return Complex, nil
 	}
 
-	raw := strings.TrimSpace(resp.Content)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
-	raw = strings.TrimSpace(raw)
+	raw := extractJSON(resp.Content)
 
 	var result struct {
 		Classification string `json:"classification"`

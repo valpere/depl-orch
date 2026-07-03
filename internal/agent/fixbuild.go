@@ -44,8 +44,9 @@ func (f *FixBuild) Recover(ctx context.Context, st *pipeline.State, stage string
 	}
 
 	failing := string(st.Outputs["build"])
+	historyPrompt := buildHistoryPrompt(root, "build")
 	msgs := []*schema.Message{
-		schema.SystemMessage(fixBuildSystemPrompt),
+		schema.SystemMessage(fixBuildSystemPrompt + historyPrompt),
 		schema.UserMessage("`go build ./...` failed:\n\n" + failing + "\n\nFix the source so the package compiles. Do not modify test files."),
 	}
 
@@ -58,6 +59,10 @@ func (f *FixBuild) Recover(ctx context.Context, st *pipeline.State, stage string
 	if out, err := pipeline.DefaultCommander.Run(ctx, root, "go", "build", "./..."); err != nil {
 		_ = gitRollback(ctx, root, snapshot)
 		return fmt.Errorf("fix-build did not fix compile errors: %w (rolled back)\n%s", err, tailString(out, 1000))
+	}
+
+	if diffOut, err := pipeline.DefaultCommander.Run(ctx, root, "git", "diff", snapshot); err == nil && len(diffOut) > 0 {
+		appendHistory(root, HistoryItem{Stage: "build", Error: failing, Diff: string(diffOut), Timestamp: time.Now()})
 	}
 
 	f.writeRationale(root, failing)
