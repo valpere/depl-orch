@@ -53,6 +53,10 @@ go.work.sum
 
 tmp/
 
+# Untracked local scratch directories
+_knowledge-base/
+_patterns/
+
 # compiled sample-service binary (build artifact from the e2e pipeline target)
 /examples/sample-service/sample-service
 
