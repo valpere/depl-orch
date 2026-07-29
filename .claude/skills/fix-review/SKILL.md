@@ -1,6 +1,6 @@
 ---
 name: fix-review
-description: "depl-orch PR review: 3 Ollama-cloud models parallel → Claude arbiter → .agents/review.md → merge. localhost:11434, no auth. Usage: /fix-review [PR#]"
+description: "depl-orch PR review: 3 Ollama-cloud models parallel → Claude arbiter → .agents/review.md → merge. Optional tier-2 (external agent CLIs) and tier-3 (Ollama local) failover when configured. localhost:11434. Usage: /fix-review [PR#]"
 ---
 
 # Skill: /fix-review (depl-orch)
@@ -15,6 +15,12 @@ Claude adjudicates. Result committed to `.agents/review.md` (per AGENTS.md §3).
 diff ──┬── Round 1 (minimax-m3:cloud)         ┐
        ├── Round 2 (kimi-k2.6:cloud)           ├── aggregate → Arbiter → fix → gates → review.md → merge
        └── Round 3 (gemma4:31b-cloud)┘
+                          ↓ on cloud round failure
+              Tier 2: external_agents (cursor-agent | omp | codex | opencode | kilo)
+                          ↓ on Tier 2 failure
+              Tier 3: ollama_local (qwen2.5-coder:7b | granite3.3:8b | qwen3-coder:30b)
+                          ↓ on Tier 3 failure
+              hard failure (round produces 0 findings, surfaced in Step 11)
 ```
 
 ## RUN COMPLETION CONTRACT
@@ -25,22 +31,86 @@ Run is complete only after **both** in order:
 
 ---
 
-## STEP 0: Resolve PR + load config
+## STEP 0: Resolve PR + load config + probe + tiers
 
 ```bash
 source .claude/skills/lib/rest.sh
+source .claude/skills/lib/agents.sh        # try_external_agents + run_external_agent
 CONFIG=".claude/skills/fix-review/config.yaml"
 
 PR_NUMBER="${1:-$(gh pr view --json number --jq '.number' 2>/dev/null)}"
 [ -z "$PR_NUMBER" ] && { echo "No PR found. Pass /fix-review <number>"; exit 1; }
 BASE_BRANCH=$(gh pr view "$PR_NUMBER" --json baseRefName --jq '.baseRefName')
 
-API_URL=$(grep 'api_url:' "$CONFIG" | awk '{print $2}')
-MODEL_R1=$(grep 'round_1:' "$CONFIG" | sed "s/.*{ model: //;s/ }//")
-MODEL_R2=$(grep 'round_2:' "$CONFIG" | sed "s/.*{ model: //;s/ }//")
-MODEL_R3=$(grep 'round_3:' "$CONFIG" | sed "s/.*{ model: //;s/ }//")
-REST_OLLAMA_TIMEOUT=$(grep 'ollama_timeout_s:' "$CONFIG" | awk '{print $2}')
+API_URL=$(yq -r '.ollama_api_url // .api_url // ""' "$CONFIG" 2>/dev/null \
+          || grep 'ollama_api_url\|api_url:' "$CONFIG" | head -1 | awk '{print $2}')
+[ -z "$API_URL" ] && { echo "no ollama_api_url/api_url in $CONFIG"; exit 1; }
+MODEL_R1=$(yq -r '.reviewers.round_1.model' "$CONFIG" 2>/dev/null \
+           || grep 'round_1:' "$CONFIG" | sed "s/.*{ model: //;s/ }//")
+MODEL_R2=$(yq -r '.reviewers.round_2.model' "$CONFIG" 2>/dev/null \
+           || grep 'round_2:' "$CONFIG" | sed "s/.*{ model: //;s/ }//")
+MODEL_R3=$(yq -r '.reviewers.round_3.model' "$CONFIG" 2>/dev/null \
+           || grep 'round_3:' "$CONFIG" | sed "s/.*{ model: //;s/ }//")
+REST_OLLAMA_TIMEOUT=$(yq -r '.ollama_timeout_s' "$CONFIG" 2>/dev/null \
+                      || grep 'ollama_timeout_s:' "$CONFIG" | awk '{print $2}')
 export REST_OLLAMA_TIMEOUT
+
+# Active config — read from STEP 2/3 onwards via these (not the raw MODEL_R*).
+ACTIVE_API_URL="$API_URL"
+ACTIVE_KEY=""                                # depl-orch uses ollama signin (no key)
+ACTIVE_MODELS=("$MODEL_R1" "$MODEL_R2" "$MODEL_R3")
+FAILOVER_TIER=""                              # "" | "external_agents" | "ollama_local" | "cloud_unavailable"
+FAILOVER_REASON=""
+
+# Tier existence checks (driven by config presence).
+EXTERNAL_AGENTS_EXIST="no"
+if command -v yq >/dev/null 2>&1; then
+  yq -e '.reviewers.external_agents' "$CONFIG" >/dev/null 2>&1 && EXTERNAL_AGENTS_EXIST="yes"
+fi
+
+LOCAL_TIER_EXISTS="no"
+if command -v yq >/dev/null 2>&1; then
+  _lm1=$(yq -r '.reviewers.ollama_local.round_1.model // ""' "$CONFIG" 2>/dev/null)
+  _lm2=$(yq -r '.reviewers.ollama_local.round_2.model // ""' "$CONFIG" 2>/dev/null)
+  _lm3=$(yq -r '.reviewers.ollama_local.round_3.model // ""' "$CONFIG" 2>/dev/null)
+  [ -n "$_lm1" ] && [ -n "$_lm2" ] && [ -n "$_lm3" ] && LOCAL_TIER_EXISTS="yes"
+fi
+
+# Provider probe — call the local daemon with the smallest possible payload
+# (no Authorization header — depl-orch's daemon uses device-auth via
+# `ollama signin`, not OLLAMA_API_KEY; canonical's probe_provider uses
+# Bearer auth which would be wrong here).
+deplorch_probe() {
+  local url="$1" model="$2"
+  local payload resp
+  payload=$(jq -n --arg m "$model" \
+    '{model:$m, messages:[{role:"user",content:"OK"}], stream:false, max_tokens:3}')
+  resp=$(REST_TIMEOUT=10 rest_post_ollama "$url" "$payload") || resp=""
+  # Probe succeeds ONLY when (a) the response is a valid Ollama chat
+  # envelope with non-empty content, and (b) there is no `.error` field.
+  # The earlier predicate (`jq -e '.message.content // empty'`) accepted
+  # error envelopes like `{"error":"model not found"}` because
+  # `.message.content` is null and `// empty` produced an empty string —
+  # `jq -e` then exited 0 and the probe silently reported success.
+  printf '%s' "$resp" | jq -e '(.message.content // "") != "" and (has("error") | not)' >/dev/null 2>&1
+}
+
+CLOUD_KNOWN_BAD="no"
+if ! deplorch_probe "$ACTIVE_API_URL" "$MODEL_R2" 2>&1; then
+  if [ "$EXTERNAL_AGENTS_EXIST" = "yes" ] || [ "$LOCAL_TIER_EXISTS" = "yes" ]; then
+    echo "⚠️  FAILOVER: Ollama cloud daemon unreachable — routing rounds through failover tiers"
+    CLOUD_KNOWN_BAD="yes"
+    FAILOVER_REASON="daemon probe failed"
+  else
+    echo "⚠️  WARNING: Ollama cloud daemon unreachable and no failover tier configured"
+    FAILOVER_TIER="cloud_unavailable"
+    FAILOVER_REASON="daemon down, no failover tier"
+  fi
+fi
+
+echo "→ Tier 0 (cloud): probe=$([ "$CLOUD_KNOWN_BAD" = "yes" ] && echo BAD || echo ok)   " \
+     "Tier 2 (external_agents): $EXTERNAL_AGENTS_EXIST   " \
+     "Tier 3 (ollama_local): $LOCAL_TIER_EXISTS"
 
 RUN_DIR=$(mktemp -d -t fix-review-XXXX)
 echo "$RUN_DIR" > /tmp/fixreview-rundir
@@ -101,28 +171,112 @@ printf '%s' "$PROMPT" > "$RUN_DIR/prompt.txt"
 
 ---
 
-## STEP 2: Fan out 3 rounds in parallel
+## STEP 2: Fan out 3 rounds in parallel (with cascade)
 
 ```bash
 run_round() {
   local n="$1" model="$2"
-  local payload response
-  payload=$(ollama_payload_system "$model" "$REVIEW_SYSTEM" "$PROMPT")
-  response=$(rest_post_ollama "$API_URL" "$payload") || response='{"error":"call failed"}'
-  printf '%s' "$response" > "$RUN_DIR/round_${n}.raw.json"
-  printf '%s' "$model"    > "$RUN_DIR/round_${n}.meta"
+  local r_start r_end payload response err content
+  r_start=$(python3 -c "import time;print(int(time.time()*1000))" 2>/dev/null || echo $(($(date +%s) * 1000)))
+
+  if [ "$CLOUD_KNOWN_BAD" = "yes" ]; then
+    err="cloud known unavailable (probe failed)"
+    response='{"error":"cloud known unavailable"}'
+  else
+    payload=$(ollama_payload_system "$model" "$REVIEW_SYSTEM" "$PROMPT")
+    response=$(rest_post_ollama "$API_URL" "$payload") || response='{"error":"call failed"}'
+    err=$(printf '%s' "$response" | jq -r '.error.message // .error // empty' 2>/dev/null)
+    if [ -z "$err" ]; then
+      content=$(ollama_content "$response")
+      if [ -z "$(printf '%s' "$content" | tr -d '[:space:]')" ]; then
+        echo "warn: round ${n} (${model}) returned empty content — retrying once" >&2
+        response=$(rest_post_ollama "$API_URL" "$payload") || response='{"error":"call failed"}'
+        err=$(printf '%s' "$response" | jq -r '.error.message // .error // empty' 2>/dev/null)
+        # Retry also yielded empty content (no .error) — force-set err so
+        # the round cascades to external_agents / ollama_local instead of
+        # silently producing 0 findings.
+        if [ -z "$err" ]; then
+          retry_content=$(ollama_content "$response")
+          [ -z "$(printf '%s' "$retry_content" | tr -d '[:space:]')" ] && err="empty content after retry"
+        fi
+      fi
+    fi
+  fi
+
+  # Tier 2 — external agent CLIs (independent subscriptions).
+  if [ -n "$err" ] && [ "$FAILOVER_TIER" != "cloud_unavailable" ] && [ "$EXTERNAL_AGENTS_EXIST" = "yes" ]; then
+    echo "warn: round ${n} error (${err}) — trying external_agents" >&2
+    local prompt_file; prompt_file=$(mktemp)
+    trap "rm -f '$prompt_file'" RETURN
+    printf '%s\n\n%s' "$REVIEW_SYSTEM" "$PROMPT" > "$prompt_file"
+    if try_external_agents "$n" "$prompt_file" "$CONFIG" "$RUN_DIR"; then
+      r_end=$(python3 -c "import time;print(int(time.time()*1000))" 2>/dev/null || echo $(($(date +%s) * 1000)))
+      local winning_tool; winning_tool=$(head -1 "$RUN_DIR/round_${n}.meta")
+      printf '%s\n%s' "$winning_tool" "$((r_end - r_start))" > "$RUN_DIR/round_${n}.meta"
+      return 0
+    fi
+    err="all external_agents failed"
+    # Write a marker so the post-`wait` reconciliation sees that Tier 2
+    # exhausted for this round (otherwise try_external_agents only writes
+    # round_*.failover on success, and "every tool failed" silently looks
+    # like "no failover was attempted").
+    printf 'external_agents:none\n' > "$RUN_DIR/round_${n}.failover"
+  fi
+
+  # Tier 3 — Ollama local (fully offline, no key).
+  if [ -n "$err" ] && [ "$FAILOVER_TIER" != "cloud_unavailable" ] && [ "$LOCAL_TIER_EXISTS" = "yes" ]; then
+    local local_model
+    local_model=$(yq -r ".reviewers.ollama_local.round_${n}.model // \"\"" "$CONFIG" 2>/dev/null)
+    echo "warn: round ${n} error (${err}) — trying Ollama local (${local_model})" >&2
+    payload=$(ollama_payload_system "$local_model" "$REVIEW_SYSTEM" "$PROMPT")
+    response=$(rest_post_ollama "$API_URL" "$payload") || response='{"error":"ollama local failover failed"}'
+    model="$local_model"
+    printf '%s' "$local_model" > "$RUN_DIR/round_${n}.failover"
+  fi
+
+  r_end=$(python3 -c "import time;print(int(time.time()*1000))" 2>/dev/null || echo $(($(date +%s) * 1000)))
+  printf '%s' "$response"   > "$RUN_DIR/round_${n}.raw.json"
+  printf '%s\n%s' "$model"  "$((r_end - r_start))" > "$RUN_DIR/round_${n}.meta"
 }
-export -f run_round rest_post rest_post_ollama ollama_payload_system
-export API_URL REVIEW_SYSTEM PROMPT RUN_DIR
+export -f run_round rest_post rest_post_ollama ollama_payload ollama_payload_system \
+            ollama_content try_external_agents run_external_agent \
+            agent_cursor_agent agent_omp agent_codex agent_opencode agent_kilo
+export API_URL REVIEW_SYSTEM PROMPT RUN_DIR \
+       CLOUD_KNOWN_BAD FAILOVER_TIER EXTERNAL_AGENTS_EXIST LOCAL_TIER_EXISTS CONFIG
 
 run_round 1 "$MODEL_R1" &
 run_round 2 "$MODEL_R2" &
 run_round 3 "$MODEL_R3" &
 wait
+
+# Reconcile per-round failover markers into FAILOVER_TIER for Step 11 reporting.
+# (Subshells can't update parent vars; each round's Tier 2/3 success wrote
+# $RUN_DIR/round_${n}.failover. Prefer reporting external_agents if any round
+# used it — Step 11 still reads each marker individually for per-round detail.)
+if [ "$FAILOVER_TIER" = "" ] && ls "$RUN_DIR"/round_*.failover >/dev/null 2>&1; then
+  if grep -l '^external_agents:' "$RUN_DIR"/round_*.failover >/dev/null 2>&1; then
+    FAILOVER_TIER="external_agents"
+  else
+    FAILOVER_TIER="ollama_local"
+  fi
+  FAILOVER_REASON="per-round error mid-review (see round_*.failover)"
+fi
+
+# If Tier 2 was attempted (any `external_agents:*` marker exists) but every
+# tool returned empty, the round-level cascade fully exhausted — surface a
+# loud warning. This used to be invisible: the round produced 0 findings,
+# no `.error` marker either, and the user saw a "clean" review.
+if [ "$FAILOVER_TIER" = "external_agents" ] && ls "$RUN_DIR"/round_*.failover >/dev/null 2>&1; then
+  if grep -l '^external_agents:none$' "$RUN_DIR"/round_*.failover >/dev/null 2>&1; then
+    echo "⚠️  WARNING: external_agents cascade fully exhausted for at least one round — round produced 0 findings via no successful tier"
+  fi
+fi
 ```
 
-Per-round timeout: `REST_OLLAMA_TIMEOUT` (default 300s in `rest.sh`). A failed round
-produces `{"error":"call failed"}` — treated as 0 findings; run still proceeds.
+Per-round timeout: `REST_OLLAMA_TIMEOUT` (default 600s). A round that fails
+the cloud call cascades through `external_agents` (Tier 2), then `ollama_local`
+(Tier 3). Only when **all three tiers** fail for a round does it produce
+`{"error":"call failed"}` and contribute 0 findings to the aggregate.
 
 ---
 
@@ -317,3 +471,28 @@ Print to user:
 
 [findings table if any confirmed]
 ```
+
+**Failover reporting (mandatory when any round used a fallback tier):**
+After the summary block, if `$FAILOVER_TIER` is non-empty **or** any
+`$RUN_DIR/round_*.failover` file exists, append a `### ⚠️ Provider failover`
+section:
+
+```
+### ⚠️ Provider failover
+
+Tier used: ${FAILOVER_TIER}   # external_agents | ollama_local | cloud_unavailable
+Reason: ${FAILOVER_REASON}
+Primary models: ${MODEL_R1} · ${MODEL_R2} · ${MODEL_R3}
+Round-by-round:
+- round 1 → <details from round_1.failover if present>
+- round 2 → <details from round_2.failover if present>
+- round 3 → <details from round_3.failover if present>
+```
+
+Marker-file conventions (set by STEP 2):
+- `external_agents:<tool>` → "fell back to external agent `<tool>`"
+- bare local model name → "fell back to Ollama local `<model>`"
+
+When `FAILOVER_TIER=cloud_unavailable`, the PR was NOT reviewed (0 findings);
+do NOT merge blindly — print the warning, ask the user to check
+`ollama serve` and retry.
