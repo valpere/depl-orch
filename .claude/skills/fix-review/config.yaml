@@ -2,7 +2,7 @@
 # Mirrors opencode.json reviewer models.
 # Auth: localhost:11434 — ollama signin handles device auth, no OLLAMA_API_KEY.
 
-api_url: http://localhost:11434/api/chat
+ollama_api_url: http://localhost:11434/api/chat
 
 ollama_timeout_s: 600
 
@@ -10,6 +10,24 @@ reviewers:
   round_1: { model: minimax-m3:cloud }
   round_2: { model: kimi-k2.6:cloud }
   round_3: { model: gemma4:31b-cloud }
+
+  # Tier 2 — external agent CLIs (independent subscriptions, own free tiers).
+  # Cascaded in priority order on cloud round failure; first tool that
+  # returns non-empty output wins for that round. Absent = no Tier 2.
+  external_agents:
+    - { tool: cursor-agent, model: auto }
+    - { tool: omp }
+    - { tool: codex }
+    - { tool: opencode, model: "opencode/nemotron-3-ultra-free" }
+    - { tool: kilo }
+
+  # Tier 3 — Ollama local (fully offline, no key). All 3 models must be
+  # locally pulled (verified via `ollama list`); absent = no Tier 3.
+  # Cascade is cloud → external_agents → ollama_local → hard failure.
+  ollama_local:
+    round_1: { model: qwen2.5-coder:7b }
+    round_2: { model: granite3.3:8b }
+    round_3: { model: qwen3-coder:30b }
 
 telemetry_enabled: true
 telemetry_file: .claude/skills/fix-review/telemetry.jsonl
