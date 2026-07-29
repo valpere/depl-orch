@@ -86,7 +86,13 @@ deplorch_probe() {
   payload=$(jq -n --arg m "$model" \
     '{model:$m, messages:[{role:"user",content:"OK"}], stream:false, max_tokens:3}')
   resp=$(REST_TIMEOUT=10 rest_post_ollama "$url" "$payload") || resp=""
-  printf '%s' "$resp" | jq -e '.message.content // empty' >/dev/null 2>&1
+  # Probe succeeds ONLY when (a) the response is a valid Ollama chat
+  # envelope with non-empty content, and (b) there is no `.error` field.
+  # The earlier predicate (`jq -e '.message.content // empty'`) accepted
+  # error envelopes like `{"error":"model not found"}` because
+  # `.message.content` is null and `// empty` produced an empty string —
+  # `jq -e` then exited 0 and the probe silently reported success.
+  printf '%s' "$resp" | jq -e '(.message.content // "") != "" and (has("error") | not)' >/dev/null 2>&1
 }
 
 CLOUD_KNOWN_BAD="no"
@@ -180,14 +186,21 @@ run_round() {
     payload=$(ollama_payload_system "$model" "$REVIEW_SYSTEM" "$PROMPT")
     response=$(rest_post_ollama "$API_URL" "$payload") || response='{"error":"call failed"}'
     err=$(printf '%s' "$response" | jq -r '.error.message // .error // empty' 2>/dev/null)
-    [ -z "$err" ] && {
+    if [ -z "$err" ]; then
       content=$(ollama_content "$response")
       if [ -z "$(printf '%s' "$content" | tr -d '[:space:]')" ]; then
         echo "warn: round ${n} (${model}) returned empty content — retrying once" >&2
         response=$(rest_post_ollama "$API_URL" "$payload") || response='{"error":"call failed"}'
         err=$(printf '%s' "$response" | jq -r '.error.message // .error // empty' 2>/dev/null)
+        # Retry also yielded empty content (no .error) — force-set err so
+        # the round cascades to external_agents / ollama_local instead of
+        # silently producing 0 findings.
+        if [ -z "$err" ]; then
+          retry_content=$(ollama_content "$response")
+          [ -z "$(printf '%s' "$retry_content" | tr -d '[:space:]')" ] && err="empty content after retry"
+        fi
       fi
-    }
+    fi
   fi
 
   # Tier 2 — external agent CLIs (independent subscriptions).
@@ -203,6 +216,11 @@ run_round() {
       return 0
     fi
     err="all external_agents failed"
+    # Write a marker so the post-`wait` reconciliation sees that Tier 2
+    # exhausted for this round (otherwise try_external_agents only writes
+    # round_*.failover on success, and "every tool failed" silently looks
+    # like "no failover was attempted").
+    printf 'external_agents:none\n' > "$RUN_DIR/round_${n}.failover"
   fi
 
   # Tier 3 — Ollama local (fully offline, no key).
@@ -242,6 +260,16 @@ if [ "$FAILOVER_TIER" = "" ] && ls "$RUN_DIR"/round_*.failover >/dev/null 2>&1; 
     FAILOVER_TIER="ollama_local"
   fi
   FAILOVER_REASON="per-round error mid-review (see round_*.failover)"
+fi
+
+# If Tier 2 was attempted (any `external_agents:*` marker exists) but every
+# tool returned empty, the round-level cascade fully exhausted — surface a
+# loud warning. This used to be invisible: the round produced 0 findings,
+# no `.error` marker either, and the user saw a "clean" review.
+if [ "$FAILOVER_TIER" = "external_agents" ] && ls "$RUN_DIR"/round_*.failover >/dev/null 2>&1; then
+  if grep -l '^external_agents:none$' "$RUN_DIR"/round_*.failover >/dev/null 2>&1; then
+    echo "⚠️  WARNING: external_agents cascade fully exhausted for at least one round — round produced 0 findings via no successful tier"
+  fi
 fi
 ```
 

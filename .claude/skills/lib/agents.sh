@@ -105,11 +105,6 @@ try_external_agents() {
   # driven by stdin would otherwise race/interleave with those inner reads
   # (confirmed empirically: without this, a tool mid-loop got truncated
   # input because it silently shared the loop's stdin stream).
-  # Read the config list on fd 3, not stdin — several adapters (cursor-agent,
-  # codex, opencode) read their prompt from stdin, and a `while read` loop
-  # driven by stdin would otherwise race/interleave with those inner reads
-  # (confirmed empirically: without this, a tool mid-loop got truncated
-  # input because it silently shared the loop's stdin stream).
   # 2>/dev/null silences yq's "Cannot iterate over null" stderr noise if a
   # future caller forgets the EXTERNAL_AGENTS_EXIST gate — no functional
   # impact since empty input → zero loop iterations → still falls through.
