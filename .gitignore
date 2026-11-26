@@ -60,8 +60,5 @@ _patterns/
 # compiled sample-service binary (build artifact from the e2e pipeline target)
 /examples/sample-service/sample-service
 
-# dreaming reports/log are generated weekly — keep the script+prompt, not the output
-.claude/dreaming/reports/
-
 # fix-review runtime output (run logs, not skill config)
 .claude/skills/fix-review/telemetry.jsonl
