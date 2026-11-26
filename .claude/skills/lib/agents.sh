@@ -9,19 +9,26 @@
 #                                                     # reviewers.external_agents
 #                                                     # list from config.yaml
 #
-# Each of cursor-agent/omp/codex/opencode/kilo is invoked read-only
-# (no edits, no shell execution) and already unwraps its own tool-specific
+# Each of cursor-agent/agy/omp/codex/opencode/kilo/kiro-cli is invoked
+# read-only (no edits, no shell execution) and already unwraps its own tool-specific
 # output envelope, so callers get plain text back — the SAME code-fence-strip
 # + JSON-array-validate logic already used for Ollama responses (see
 # fix-review/SKILL.md STEP 4 parse_round()) works unchanged downstream.
 #
 # All prompt content is piped via stdin/file-ref, never a shell argument —
-# PR diffs can be large enough to risk ARG_MAX.
+# PR diffs can be large enough to risk ARG_MAX. Exception: agy (see its
+# adapter below) — its prompt MUST be a positional argument.
 #
-# `agy` was evaluated and dropped: even with the full review prompt (not
-# just a throwaway one-liner) it consistently explores the filesystem/
-# environment instead of answering directly, in both --mode plan and
-# unrestricted modes. Not a prompt-wording problem — verified 2026-07-29.
+# `agy` was initially evaluated and dropped (2026-07-29) after it kept
+# exploring the filesystem instead of answering. Root cause found
+# 2026-07-30: that was a testing mistake, not an agy limitation —
+# `--prompt "text"` is just an alias for the `--print` boolean flag, not
+# a value-taking option, so the text after it was silently dropped and
+# agy fell back to autonomous exploration with no real prompt. The
+# working pattern (`-p "text"` as a bare flag + trailing positional
+# argument).
+# Verified with the real review prompt: direct, correct answers, with
+# or without --mode plan.
 
 # ---------------------------------------------------------------------------
 # Per-tool adapters — read-only invocation + envelope extraction, verified
@@ -33,6 +40,18 @@ agent_cursor_agent() {
   cursor-agent --print --output-format json --mode plan \
     ${model:+--model "$model"} < "$prompt_file" \
     | jq -r '.result // empty'
+}
+
+agent_agy() {
+  local model="$1" prompt_file="$2"
+  # Unlike every other adapter here, the prompt MUST be a positional
+  # argument, not stdin/file-ref — verified 2026-07-30 (see the header
+  # comment above). This does mean agy
+  # risks ARG_MAX on unusually large diffs where the other tools don't;
+  # accepted tradeoff since it's otherwise a clean, working adapter.
+  agy -p "$(cat "$prompt_file")" --model "${model:-Gemini 3.8 Flash (Low)}" \
+    --mode plan --output-format json 2>/dev/null \
+    | jq -r '.response // empty'
 }
 
 agent_omp() {
@@ -69,6 +88,23 @@ agent_kilo() {
     | jq -rs '[.[] | select(.type=="text")] | last | .part.text // empty'
 }
 
+agent_kiro_cli() {
+  local model="$1" prompt_file="$2"
+  # ACP-style JSON Lines (--output-format stream-json), same class of
+  # output as opencode/kilo but with a `runFinished` event that already
+  # carries the complete answer in `.data.finalText` — no need to
+  # concatenate chunk events like the other two. Requires
+  # --agent-engine v2 explicitly: stream-json 404s on the v1 (default)
+  # engine with a clear error, verified 2026-08-27. --trust-tools= (empty
+  # set) is the read-only guarantee, same role as omp's --no-tools.
+  # Prompt is a positional argument, not stdin — same ARG_MAX caveat as
+  # agy's adapter above.
+  kiro-cli chat --no-interactive --output-format stream-json \
+    --trust-tools= --agent-engine v2 ${model:+--model "$model"} \
+    "$(cat "$prompt_file")" 2>/dev/null \
+    | jq -rs '[.[] | select(.type=="runFinished")] | last | .data.finalText // empty'
+}
+
 # ---------------------------------------------------------------------------
 # Dispatcher + cascade
 # ---------------------------------------------------------------------------
@@ -79,10 +115,12 @@ run_external_agent() {
   local tool="$1" model="$2" prompt_file="$3"
   case "$tool" in
     cursor-agent) agent_cursor_agent "$model" "$prompt_file" ;;
+    agy)          agent_agy          "$model" "$prompt_file" ;;
     omp)          agent_omp          "$model" "$prompt_file" ;;
     codex)        agent_codex        "$model" "$prompt_file" ;;
     opencode)     agent_opencode     "$model" "$prompt_file" ;;
     kilo)         agent_kilo         "$model" "$prompt_file" ;;
+    kiro-cli)     agent_kiro_cli     "$model" "$prompt_file" ;;
     *)
       echo "warn: unknown external agent tool '$tool' — skipping" >&2
       return 1

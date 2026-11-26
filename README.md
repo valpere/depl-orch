@@ -14,11 +14,13 @@ design and roadmap, and [`AGENTS.md`](AGENTS.md) for agent/contributor rules.
 |-----------|-------|-------|
 | M0 | Scaffold (module, layout) | ✅ done |
 | M1 | Deterministic pipeline (build → test → docker-build → docker-push), no LLM | ✅ done |
-| **M2** | **Backend-agnostic model factory + fix-test recovery with git rollback** | ✅ done |
-| M3 | Cost-aware classifier | ⏳ next |
-| M4 | More agentic steps (fix-build, generate-dockerfile, fix-workflow) | — |
-| M5 | Deploy stage (compose \| k8s) + GitHub Actions + branch-gating | — |
-| M6 | Observability (Eino callbacks → Prometheus → Grafana) | — |
+| M2 | Backend-agnostic model factory + fix-test recovery with git rollback | ✅ done |
+| M3 | Cost-aware classifier | ✅ done |
+| M4 | More agentic steps (fix-build, generate-dockerfile, fix-workflow) | ✅ done |
+| M5 | Deploy stage (compose \| k8s) + GitHub Actions + branch-gating | ✅ done |
+| M6 | Observability (Eino callbacks → Prometheus → Grafana) | ✅ done |
+| M7 | Health-check gate (poll /healthz after deploy until 2xx or timeout) | ✅ done |
+| M8 | Auto-rollback gate (health-check failure triggers deployer rollback) | ✅ done |
 
 ## Usage (M1)
 
@@ -59,7 +61,7 @@ Control flow stays plain Go; the model only fills in individual tool calls.
 | `DEPLOY_RECOVER` | `false` | enable fix-test recovery |
 | `DEPLOY_MAX_RETRIES` | `1` | recovery attempts per stage |
 | `MODEL_BACKEND` | `ollama` | `ollama` \| `openai` \| `anthropic` |
-| `MODEL_ID` | *(required if recovering)* | model id, e.g. `qwen3.5:cloud` |
+| `MODEL_ID` | *(required if recovering)* | model id, e.g. `kimi-k2.7-code:cloud` |
 | `MODEL_BASE_URL` | Ollama local | endpoint |
 | `MODEL_API_KEY` | — | key for openai / anthropic |
 
