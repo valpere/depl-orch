@@ -5,9 +5,8 @@ The pipeline (build → test → docker → push → deploy) is plain Go and rep
 in CI. LLM "thinking" is confined to individual recovery/generation steps, never
 to control flow.
 
-> Status: M0/M1 skeleton exists (pipeline core, deterministic stages, model
-> factory, fix-test recovery, repo-scoped tools). This doc defines the full
-> target and the path from skeleton to v1.
+> Status: M0–M8 done (see §6). This doc defines the full target and the path
+> from skeleton to v1.
 
 ---
 
@@ -192,13 +191,17 @@ a milestone until the previous one is green.
   guarded tools; opt-in via `DEPLOY_RECOVER`.)*
 - **M3 — Cost-aware classifier.** Cheap triage node selects fixer tier or
   fails fast. Verify it doesn't escalate trivial cases and doesn't loop on
-  unfixable ones.
+  unfixable ones. *(done)*
 - **M4 — More agentic steps.** fix-build, generate-dockerfile, fix-workflow,
-  each following the fix-test pattern (scoped tools, rollback, bounded, audited).
+  each following the fix-test pattern (scoped tools, rollback, bounded, audited). *(done)*
 - **M5 — Deploy stage + GitHub Actions.** Real deploy target wired; conveyor runs
-  as a CI step; branch-gating for agentic recovery; agent changes → PR.
+  as a CI step; branch-gating for agentic recovery; agent changes → PR. *(done)*
 - **M6 — Observability.** Eino callbacks → Prometheus → Grafana; cost/retry/
-  duration per run.
+  duration per run. *(done)*
+- **M7 — Health-check gate.** After deploy, poll `/healthz` until 2xx or
+  timeout; a failed check fails the run. *(done)*
+- **M8 — Auto-rollback gate.** A health-check failure triggers deployer
+  rollback. *(done)*
 
 ---
 

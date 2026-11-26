@@ -8,7 +8,7 @@
       "options": { "baseURL": "http://localhost:11434/v1" },
       "models": {
         "gemma4:31b-cloud": { "tools": true },
-        "qwen3.5:cloud": { "tools": true },
+        "kimi-k2.7-code:cloud": { "tools": true },
         "minimax-m3:cloud": { "tools": true },
         "kimi-k2.6:cloud": { "tools": true }
       }
@@ -19,7 +19,7 @@
     "coder": {
       "description": "Implements code changes per .agents/plan.md. Writes a changelog to .agents/changes.md.",
       "mode": "subagent",
-      "model": "ollama/qwen3.5:cloud",
+      "model": "ollama/kimi-k2.7-code:cloud",
       "temperature": 0.1,
       "tools": { "write": true, "edit": true, "bash": true }
     },
@@ -40,7 +40,7 @@
     "documenter": {
       "description": "Writes/updates README, godoc comments, and .agents/summary.md.",
       "mode": "primary",
-      "model": "ollama/qwen3.5:cloud",
+      "model": "ollama/kimi-k2.7-code:cloud",
       "temperature": 0.4,
       "tools": { "write": true, "edit": true, "bash": false }
     }

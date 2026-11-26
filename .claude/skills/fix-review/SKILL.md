@@ -16,7 +16,7 @@ diff ──┬── Round 1 (minimax-m3:cloud)         ┐
        ├── Round 2 (kimi-k2.6:cloud)           ├── aggregate → Arbiter → fix → gates → review.md → merge
        └── Round 3 (gemma4:31b-cloud)┘
                           ↓ on cloud round failure
-              Tier 2: external_agents (cursor-agent | omp | codex | opencode | kilo)
+              Tier 2: external_agents (cursor-agent | agy | omp | codex | opencode | kilo | kiro-cli)
                           ↓ on Tier 2 failure
               Tier 3: ollama_local (qwen2.5-coder:7b | granite3.3:8b | qwen3-coder:30b)
                           ↓ on Tier 3 failure
@@ -177,7 +177,7 @@ printf '%s' "$PROMPT" > "$RUN_DIR/prompt.txt"
 run_round() {
   local n="$1" model="$2"
   local r_start r_end payload response err content
-  r_start=$(python3 -c "import time;print(int(time.time()*1000))" 2>/dev/null || echo $(($(date +%s) * 1000)))
+  r_start=$(($(date +%s%N) / 1000000))
 
   if [ "$CLOUD_KNOWN_BAD" = "yes" ]; then
     err="cloud known unavailable (probe failed)"
@@ -210,7 +210,7 @@ run_round() {
     trap "rm -f '$prompt_file'" RETURN
     printf '%s\n\n%s' "$REVIEW_SYSTEM" "$PROMPT" > "$prompt_file"
     if try_external_agents "$n" "$prompt_file" "$CONFIG" "$RUN_DIR"; then
-      r_end=$(python3 -c "import time;print(int(time.time()*1000))" 2>/dev/null || echo $(($(date +%s) * 1000)))
+      r_end=$(($(date +%s%N) / 1000000))
       local winning_tool; winning_tool=$(head -1 "$RUN_DIR/round_${n}.meta")
       printf '%s\n%s' "$winning_tool" "$((r_end - r_start))" > "$RUN_DIR/round_${n}.meta"
       return 0
@@ -234,13 +234,13 @@ run_round() {
     printf '%s' "$local_model" > "$RUN_DIR/round_${n}.failover"
   fi
 
-  r_end=$(python3 -c "import time;print(int(time.time()*1000))" 2>/dev/null || echo $(($(date +%s) * 1000)))
+  r_end=$(($(date +%s%N) / 1000000))
   printf '%s' "$response"   > "$RUN_DIR/round_${n}.raw.json"
   printf '%s\n%s' "$model"  "$((r_end - r_start))" > "$RUN_DIR/round_${n}.meta"
 }
 export -f run_round rest_post rest_post_ollama ollama_payload ollama_payload_system \
             ollama_content try_external_agents run_external_agent \
-            agent_cursor_agent agent_omp agent_codex agent_opencode agent_kilo
+            agent_cursor_agent agent_agy agent_omp agent_codex agent_opencode agent_kilo agent_kiro_cli
 export API_URL REVIEW_SYSTEM PROMPT RUN_DIR \
        CLOUD_KNOWN_BAD FAILOVER_TIER EXTERNAL_AGENTS_EXIST LOCAL_TIER_EXISTS CONFIG
 
@@ -289,16 +289,28 @@ for n in 1 2 3; do
   # Strip code fences if model ignored instructions
   content=$(printf '%s' "$content" | sed -E 's/^```(json)?[[:space:]]*//; s/[[:space:]]*```$//')
   if ! printf '%s' "$content" | jq -e 'type == "array"' >/dev/null 2>&1; then
-    printf 'warn: round %s not a JSON array — 0 findings\n' "$n" >&2
+    # Keep the raw answer for the arbiter (Step 5); [] only keeps aggregation working.
+    # Such a round is NOT clean: Step 11 reports it, telemetry has parse_ok:false.
     echo "[]" > "$RUN_DIR/round_${n}.findings.json"
+    if [ -n "$(printf '%s' "$content" | tr -d '[:space:]')" ]; then
+      printf '%s\n' "$content" > "$RUN_DIR/round_${n}.unparsed.txt"
+      printf 'warn: round %s response is not a valid JSON array — kept in round_%s.unparsed.txt for the arbiter\n' "$n" "$n" >&2
+    else
+      printf 'warn: round %s returned empty content — 0 findings\n' "$n" >&2
+    fi
   else
     # Tag each finding with the model name so Step 4 can count unique models per location.
-    model=$(cat "$RUN_DIR/round_${n}.meta")
+    # .meta line 1 = model, line 2 = duration ms.
+    model=$(head -1 "$RUN_DIR/round_${n}.meta")
     printf '%s' "$content" | jq --arg m "$model" 'map(. + {model: $m})' \
       > "$RUN_DIR/round_${n}.findings.json"
   fi
 done
 ```
+
+If a round returned prose or broken JSON, its findings are not lost: the raw
+answer is in `round_N.unparsed.txt` and the arbiter reads it (Step 5). Don't
+retry the model and don't repair the JSON with regexes — parallel mode runs once.
 
 ---
 
@@ -352,6 +364,10 @@ contradicts `AGENTS.md` load-bearing invariants should be DISMISSED with reason.
 - `Recoverer == nil` ⇒ exact M1 deterministic behaviour preserved.
 - Secrets never logged, API keys read from env only.
 - Path-traversal guard on all repo-scoped file access.
+
+**Unparsed rounds:** for each `$RUN_DIR/round_*.unparsed.txt`, read the
+model's answer and carry its findings over by hand, as that model's vote
+(same file/line dedupe as Step 4). Note in Step 11 whether it was carried over.
 
 **Independent scan:** also walk the full diff once and flag anything all 3 models
 missed (errors and warnings only — don't add suggestions).
@@ -415,13 +431,13 @@ Then commit (fixes first, then review.md):
 git add <changed source files>
 git commit -m "fix(review): apply /fix-review findings for PR #${PR_NUMBER}
 
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+<attribution line from the current session's instructions>"
 
 # Always commit review.md:
 git add .agents/review.md
 git commit -m "docs: /fix-review notes for PR #${PR_NUMBER}
 
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+<attribution line from the current session's instructions>"
 
 git push
 ```
@@ -434,10 +450,33 @@ Append to `$TELEMETRY_FILE` (from config, default `.claude/skills/fix-review/tel
 
 One row per model round + one arbiter row:
 ```jsonl
-{"ts":"...","pr":N,"run_dir":"...","round":1,"model":"minimax-m3:cloud","findings":N,"status":"ok|error","ms":N}
-{"ts":"...","pr":N,"run_dir":"...","round":2,"model":"kimi-k2.6:cloud","findings":N,"status":"ok|error","ms":N}
-{"ts":"...","pr":N,"run_dir":"...","round":3,"model":"gemma4:31b-cloud","findings":N,"status":"ok|error","ms":N}
+{"ts":"...","pr":N,"run_dir":"...","round":1,"model":"minimax-m3:cloud","findings":N,"parse_ok":true,"status":"ok|error","ms":N}
+{"ts":"...","pr":N,"run_dir":"...","round":2,"model":"kimi-k2.6:cloud","findings":N,"parse_ok":true,"status":"ok|error","ms":N}
+{"ts":"...","pr":N,"run_dir":"...","round":3,"model":"gemma4:31b-cloud","findings":N,"parse_ok":true,"status":"ok|error","ms":N}
 {"ts":"...","pr":N,"run_dir":"...","role":"arbiter","model":"claude","confirmed":N,"dismissed":N,"deferred":N,"fixes_applied":N,"merged":true|false}
+```
+
+`parse_ok` is `false` only when the round left a non-empty invalid answer in
+`round_N.unparsed.txt`; empty content is 0 findings with `parse_ok:true`.
+
+```bash
+TELEMETRY_FILE=$(yq -r '.telemetry_file // ".claude/skills/fix-review/telemetry.jsonl"' "$CONFIG")
+TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+for N in 1 2 3; do
+  meta="$RUN_DIR/round_${N}.meta"
+  [ -f "$meta" ] || continue
+  PARSE_OK=true; [ -f "$RUN_DIR/round_${N}.unparsed.txt" ] && PARSE_OK=false
+  STATUS=ok; jq -e '.error' "$RUN_DIR/round_${N}.raw.json" >/dev/null 2>&1 && STATUS=error
+  jq -cn --arg ts "$TS" --argjson pr "$PR_NUMBER" --arg rd "$RUN_DIR" --argjson round "$N" \
+    --arg model "$(sed -n 1p "$meta")" \
+    --argjson findings "$(jq 'length' "$RUN_DIR/round_${N}.findings.json")" \
+    --argjson parse_ok "$PARSE_OK" --arg status "$STATUS" --argjson ms "$(sed -n 2p "$meta")" \
+    '{ts:$ts, pr:$pr, run_dir:$rd, round:$round, model:$model, findings:$findings,
+      parse_ok:$parse_ok, status:$status, ms:$ms}' \
+    >> "$TELEMETRY_FILE" 2>/dev/null \
+    || echo "warn: telemetry write failed for round ${N} — continuing" >&2
+done
+# + one arbiter row (fields above), fail-open the same way.
 ```
 
 ---
@@ -456,6 +495,17 @@ If the PR has conflicts: stop and report — do NOT force.
 
 ## STEP 11: Final summary (mandatory)
 
+`UNPARSED` lists the rounds whose answer was kept in `round_N.unparsed.txt`:
+```bash
+UNPARSED=""
+for n in 1 2 3; do
+  [ -f "$RUN_DIR/round_${n}.unparsed.txt" ] || continue
+  [ -n "$UNPARSED" ] && UNPARSED+="; "
+  UNPARSED+="round ${n} ($(head -1 "$RUN_DIR/round_${n}.meta"))"
+done
+UNPARSED="${UNPARSED:-none}"   # add "— carried over by arbiter" per round when printing
+```
+
 Print to user:
 
 ```
@@ -464,6 +514,7 @@ Print to user:
 | | |
 |---|---|
 | Models | minimax-m3:cloud · kimi-k2.6:cloud · gemma4:31b-cloud |
+| Unparsed | ${UNPARSED} |
 | Findings | total / confirmed / dismissed / deferred |
 | Fixes applied | N |
 | Gates | pass / fail |

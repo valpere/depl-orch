@@ -16,10 +16,12 @@ reviewers:
   # returns non-empty output wins for that round. Absent = no Tier 2.
   external_agents:
     - { tool: cursor-agent, model: auto }
+    - { tool: agy, model: "Gemini 3.8 Flash (Low)" }
     - { tool: omp }
     - { tool: codex }
-    - { tool: opencode, model: "opencode/nemotron-3-ultra-free" }
+    - { tool: opencode, model: "opencode/mimo-v2.6-flash-free" }
     - { tool: kilo }
+    - { tool: kiro-cli }
 
   # Tier 3 — Ollama local (fully offline, no key). All 3 models must be
   # locally pulled (verified via `ollama list`); absent = no Tier 3.
